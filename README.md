@@ -206,14 +206,65 @@ MoGe / MoRGBD       DINO Video
 
 ### 4.2 软件
 
-- Linux、Git、Git LFS；
-- NVIDIA Driver 与兼容的 CUDA Runtime；
-- Python / Conda 环境；
-- PyTorch、FlashAttention、Transformers、LeRobot v3；
-- LingBot-VLA 2.0 代码及其依赖；
-- LingBot-VLA、Qwen3-VL、MoGe/MoRGBD、DINO 权重。
+以下版本来自本项目已经完成导入、数据处理和训练单步验证的服务器环境，建议严格锁定：
 
-安装时先验证 `torch.cuda.is_available()`、GPU 架构兼容性和 FlashAttention 导入，再安装训练依赖。RTX 6000D 属于较新架构，所有 CUDA 扩展必须确认支持目标 Compute Capability。
+| 软件 | 验证版本 | 说明 |
+|---|---|---|
+| 操作系统 | Ubuntu 22.04.5 LTS | Linux x86_64 |
+| NVIDIA Driver | 595.71.05 | RTX 6000D 驱动；不得低于 PyTorch CUDA Runtime 的最低要求 |
+| Python | 3.12.13 | 独立 Conda 环境 `lingbotvla-v2` |
+| PyTorch | 2.8.0+cu128 | 使用 CUDA 12.8 构建；以 `torch.version.cuda` 为准 |
+| TorchVision | 0.23.0+cu128 | 必须与 PyTorch 2.8.0 匹配 |
+| TorchData | 0.11.0 | 数据管线依赖 |
+| TorchCodec | 0.6.0 | 视频解码依赖 |
+| Transformers | 4.57.3 | Qwen3-VL 与 LingBot-VLA 骨干 |
+| Tokenizers | 0.22.2 | 与 Transformers 配套 |
+| FlashAttention | 2.8.3 | 必须针对当前 PyTorch、CUDA 和 GPU 架构编译 |
+| Triton | 3.4.0 | fused MoE 与编译算子依赖 |
+| LeRobot | 0.4.2 | 本项目使用其 v3 数据格式与 episode 筛选接口 |
+| Accelerate | 1.7.0 | 分布式与设备管理 |
+| Safetensors | 0.5.3 | 权重加载 |
+| NumPy | 1.26.4 | 不建议直接升级到 2.x，以免旧扩展 ABI 不兼容 |
+| PyArrow | 21.0.0 | episode 元数据与 split 生成 |
+| h5py | 3.14.0 | GOAI HDF5 原始数据读取 |
+| OpenCV Headless | 4.11.0.86 | JPEG 解码与数据转换 |
+| PyAV | 15.0.0 | LeRobot 视频读写后端 |
+| Pillow | 11.3.0 | 图像与动画验证 |
+| OmegaConf | 2.3.0 | 配置解析 |
+| PyYAML | 6.0.2 | YAML 配置读取 |
+| FFmpeg | 4.4.2 | 视频检查与 README 演示生成 |
+
+推荐的核心安装顺序：
+
+```bash
+conda create -n lingbotvla-v2 python=3.12.13 -y
+conda activate lingbotvla-v2
+
+# 按 CUDA 12.8 安装 PyTorch 官方 wheel
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+
+pip install -r requirements.txt
+pip install flash-attn==2.8.3 --no-build-isolation
+pip install lerobot==0.4.2 accelerate==1.7.0
+```
+
+这里的“CUDA 12.8”指 PyTorch wheel 的编译 Runtime，不等同于驱动所显示的最高 CUDA 兼容版本。FlashAttention 和 fused MoE 属于本地 CUDA 扩展，换 GPU、PyTorch 或 CUDA 版本后必须重新编译并复测。
+
+安装完成后执行：
+
+```bash
+python - <<'PY'
+import torch, transformers, flash_attn, lerobot, triton
+print("CUDA available:", torch.cuda.is_available())
+print("PyTorch / CUDA:", torch.__version__, torch.version.cuda)
+print("Transformers:", transformers.__version__)
+print("FlashAttention:", flash_attn.__version__)
+print("LeRobot / Triton:", lerobot.__version__, triton.__version__)
+PY
+```
+
+只有在 CUDA 可用、五个核心库均可导入，并且 `forward + backward + optimizer.step` 单步测试通过后，才能启动正式训练。模型权重还需单独准备 LingBot-VLA 2.0、Qwen3-VL、MoGe/MoRGBD 和 DINO Video。
 
 ## 5. 数据集说明
 
