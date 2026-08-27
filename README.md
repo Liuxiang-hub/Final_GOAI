@@ -384,14 +384,14 @@ steps_per_epoch = floor(568610 / global_batch_size)
 
 <table>
   <tr>
-    <td width="33.33%" align="center"><b>01 · 笔筒装笔</b><br><img src="assets/task_demos/01_fill_pen_holder.webp" width="100%" alt="笔筒装笔真机演示"></td>
-    <td width="33.33%" align="center"><b>02 · 插入充电器</b><br><img src="assets/task_demos/02_insert_charger.webp" width="100%" alt="插入充电器真机演示"></td>
-    <td width="33.33%" align="center"><b>03 · 物品放入篮筐</b><br><img src="assets/task_demos/03_put_objects_into_basket.webp" width="100%" alt="物品放入篮筐真机演示"></td>
+    <td width="33.33%" align="center"><b>01 · Fill the Pen Holder</b><br><img src="assets/task_demos/01_fill_pen_holder.webp" width="100%" alt="Fill the Pen Holder demonstration"></td>
+    <td width="33.33%" align="center"><b>02 · Insert the Charger</b><br><img src="assets/task_demos/02_insert_charger.webp" width="100%" alt="Insert the Charger demonstration"></td>
+    <td width="33.33%" align="center"><b>03 · Put Objects into the Basket</b><br><img src="assets/task_demos/03_put_objects_into_basket.webp" width="100%" alt="Put Objects into the Basket demonstration"></td>
   </tr>
   <tr>
-    <td width="33.33%" align="center"><b>04 · 堆叠并覆盖积木</b><br><img src="assets/task_demos/04_stack_and_cover_blocks.webp" width="100%" alt="堆叠并覆盖积木真机演示"></td>
-    <td width="33.33%" align="center"><b>05 · 堆叠碗具</b><br><img src="assets/task_demos/05_stack_bowls.webp" width="100%" alt="堆叠碗具真机演示"></td>
-    <td width="33.33%" align="center"><b>06 · 扶正瓶子</b><br><img src="assets/task_demos/06_stand_up_bottles.webp" width="100%" alt="扶正瓶子真机演示"></td>
+    <td width="33.33%" align="center"><b>04 · Stack and Cover the Blocks</b><br><img src="assets/task_demos/04_stack_and_cover_blocks.webp" width="100%" alt="Stack and Cover the Blocks demonstration"></td>
+    <td width="33.33%" align="center"><b>05 · Stack the Bowls</b><br><img src="assets/task_demos/05_stack_bowls.webp" width="100%" alt="Stack the Bowls demonstration"></td>
+    <td width="33.33%" align="center"><b>06 · Stand Up the Bottles</b><br><img src="assets/task_demos/06_stand_up_bottles.webp" width="100%" alt="Stand Up the Bottles demonstration"></td>
   </tr>
 </table>
 
