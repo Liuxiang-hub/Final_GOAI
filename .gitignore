@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+wandb/
+logs/
+outputs/
+checkpoints/
+models/
+/data/
+*.hdf5
+*.safetensors
+*.pth
+*.pt
+
+

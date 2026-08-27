@@ -1,0 +1,46 @@
+diff --git a/lingbotvla/data/vla_data/base_dataset.py b/lingbotvla/data/vla_data/base_dataset.py
+index 71d62a0..e42db0b 100644
+--- a/lingbotvla/data/vla_data/base_dataset.py
++++ b/lingbotvla/data/vla_data/base_dataset.py
+@@ -204,9 +204,25 @@ class VLADataset(Dataset):
+         )
+         self.dataset_meta = LeRobotDatasetMetadata(**metadata_kwargs)
+         merged_delta = {**self.get_delta_timestamps(), **self.get_video_delta_timestamps()}
++        episodes_file = getattr(dataset_config, "episodes_file", None)
++        episodes = None
++        if episodes_file:
++            episodes_path = Path(episodes_file).expanduser()
++            if not episodes_path.is_file():
++                raise FileNotFoundError(f"Episode split file does not exist: {episodes_path}")
++            episodes = [
++                int(line.strip())
++                for line in episodes_path.read_text().splitlines()
++                if line.strip()
++            ]
++            if not episodes or len(episodes) != len(set(episodes)):
++                raise ValueError(f"Episode split file is empty or contains duplicates: {episodes_path}")
++            logger.info_rank0(f"Restricting dataset to {len(episodes)} episodes from {episodes_path}")
+ 
+         self.dataset = LeRobotDataset(
+-            repo_id=repo_id,
++            repo_id=lerobot_repo_id,
++            root=lerobot_root,
++            episodes=episodes,
+             image_transforms=Resize(image_size),
+             delta_timestamps=merged_delta,
+             load_image=load_image
+diff --git a/lingbotvla/utils/arguments.py b/lingbotvla/utils/arguments.py
+index 4b8c495..ebe5f9b 100644
+--- a/lingbotvla/utils/arguments.py
++++ b/lingbotvla/utils/arguments.py
+@@ -160,6 +160,10 @@ class DataArguments:
+     train_path: str = field(
+         metadata={"help": "Path of the training data. Use comma to separate multiple datasets."},
+     )
++    episodes_file: Optional[str] = field(
++        default=None,
++        metadata={"help": "Optional text file listing episode indices to include."},
++    )
+     train_size: int = field(
+         default=10_000_000,
+         metadata={"help": "Number of tokens for training to compute training steps for dynamic batch dataloader."},
