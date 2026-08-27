@@ -1,8 +1,8 @@
-# GOAI 2026 双 PIPER 复现指南
+# 🛠️ GOAI 2026 双 PIPER 复现指南
 
 本仓库只保存团队原创配置、数据处理脚本、固定划分和 LingBot-VLA 2.0 适配补丁。原始数据与模型权重请从各上游官方仓库下载。
 
-## 1. 准备上游代码
+## 1. 📥 准备上游代码
 
 ```bash
 git clone https://github.com/Robbyant/lingbot-vla-v2.git
@@ -28,7 +28,7 @@ Final_GOAI/assets/training_data/goai_piper_x_six_tasks.example.txt
 
 将配置文件和训练列表中的 `/path/to/...` 改成实际数据、权重和输出目录。
 
-## 2. 转换数据
+## 2. 🔄 转换数据
 
 ```bash
 python scripts/data/convert_real_hdf5_to_lerobot_v30_joint.py \
@@ -40,7 +40,7 @@ python scripts/data/convert_real_hdf5_to_lerobot_v30_joint.py \
 
 转换器保留三路视频和 14 维双臂状态，并将下一帧状态作为动作目标。
 
-## 3. 验证与划分
+## 3. 🔍 验证与划分
 
 ```bash
 python scripts/data/validate_lerobot_v30_joint.py \
@@ -57,7 +57,7 @@ python scripts/data/create_lerobot_episode_splits.py \
 
 仓库中的 `splits/` 是本项目采用的固定结果。训练加载器必须指向 `train_episodes.txt`；归一化统计只允许由这 510 个训练 episodes 计算。
 
-## 4. 训练
+## 4. 🚀 训练
 
 完成 CUDA、FlashAttention、权重路径和单步反向传播测试后：
 
@@ -68,7 +68,7 @@ python tasks/vla/train_lingbotvla.py --config configs/vla/real_robot/goai_piper_
 
 实际训练入口请以上游当前版本为准。先运行 20–50 steps 冒烟测试，再进入 1,000、5,000 和 10,000 steps 阶段验证。
 
-## 5. 安全与许可证
+## 5. 🔐 安全与许可证
 
 - 不要将 SSH 密钥、密码、访问令牌或服务器地址提交到 Git。
 - 不要提交原始数据、模型权重、检查点、缓存和训练日志。
