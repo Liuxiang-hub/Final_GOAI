@@ -121,7 +121,7 @@ train:
   global_batch_size: 8
 ```
 
-正式训练前必须完成单步 `forward + backward + optimizer.step` 压力+ micro batch 提升到 4。
+正式训练前必须完成单步 `forward + backward + optimizer.step` 压力测试，再根据峰值显存决定是否把 micro batch 提升到 4。
 
 ## Step 与 Epoch
 
