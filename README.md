@@ -1,4 +1,6 @@
-# Final GOAI · Dual-PIPER VLA
+# GOAI 2026 多任务双臂开源 VLA
+
+![GOAI 2026 多任务双臂开源 VLA](assets/goai-dual-arm-hero.png)
 
 > 华中科技大学人形机器人及具身智能团队面向 GOAI 全球赛开发的双臂具身智能训练与部署工程，当前位列赛事前十名。
 
