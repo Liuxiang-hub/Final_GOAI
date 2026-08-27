@@ -242,3 +242,24 @@ steps_per_epoch = floor(568610 / global_batch_size)
 
 > 当前排名为 README 更新时的阶段性赛况，不代表最终比赛名次。
 
+---
+
+## 真机任务展示
+
+六项 GOAI 双 PIPER 真实机器人任务。每段展示一个完整代表性 episode，并统一加速压缩至约 20 秒循环播放。
+
+<table>
+  <tr>
+    <td width="33.33%" align="center"><b>01 · 笔筒装笔</b><br><img src="assets/task_demos/01_fill_pen_holder.webp" width="100%" alt="笔筒装笔真机演示"></td>
+    <td width="33.33%" align="center"><b>02 · 插入充电器</b><br><img src="assets/task_demos/02_insert_charger.webp" width="100%" alt="插入充电器真机演示"></td>
+    <td width="33.33%" align="center"><b>03 · 物品放入篮筐</b><br><img src="assets/task_demos/03_put_objects_into_basket.webp" width="100%" alt="物品放入篮筐真机演示"></td>
+  </tr>
+  <tr>
+    <td width="33.33%" align="center"><b>04 · 堆叠并覆盖积木</b><br><img src="assets/task_demos/04_stack_and_cover_blocks.webp" width="100%" alt="堆叠并覆盖积木真机演示"></td>
+    <td width="33.33%" align="center"><b>05 · 堆叠碗具</b><br><img src="assets/task_demos/05_stack_bowls.webp" width="100%" alt="堆叠碗具真机演示"></td>
+    <td width="33.33%" align="center"><b>06 · 扶正瓶子</b><br><img src="assets/task_demos/06_stand_up_bottles.webp" width="100%" alt="扶正瓶子真机演示"></td>
+  </tr>
+</table>
+
+> 展示素材来自 GOAI 官方真实机器人演示数据，顶部相机视角，统一为 480 × 360、10 FPS 动画预览。
+
