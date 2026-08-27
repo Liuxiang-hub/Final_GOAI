@@ -21,6 +21,41 @@
 | 动作窗口 | 未来 50 steps |
 | 当前策略 | 冻结 VLM 与教师，训练动作 MoE、投影层和对齐头 |
 
+### 项目目录结构
+
+```text
+Final_GOAI/
+├── assets/
+│   ├── goai-dual-arm-hero.png              # README 项目横幅
+│   ├── norm_stats/
+│   │   └── goai_piper_x.json               # 仅由 510 个训练 episodes 计算的归一化统计
+│   ├── task_demos/                          # 六项真机任务的 20 秒动画展示
+│   └── training_data/
+│       └── goai_piper_x_six_tasks.example.txt
+├── configs/
+│   ├── goai_piper_x.yaml                    # 双 PIPER 关节、夹爪与三相机映射
+│   └── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
+├── patches/
+│   └── lingbot-vla-v2/
+│       └── episode_split_loader.patch       # 训练加载器严格限制到指定 episodes
+├── scripts/
+│   └── data/
+│       ├── convert_real_hdf5_to_lerobot_v30_joint.py
+│       ├── create_lerobot_episode_splits.py
+│       └── validate_lerobot_v30_joint.py
+├── splits/
+│   ├── episode_splits_seed2026.json         # 完整、可审计的固定划分清单
+│   ├── train_episodes.txt                    # 510 episodes
+│   ├── val_episodes.txt                      # 60 episodes
+│   ├── test_episodes.txt                     # 30 episodes
+│   └── SHA256SUMS                            # 划分文件完整性校验
+├── .gitignore                                # 排除数据、权重、检查点、日志与缓存
+├── README.md                                 # 项目总览
+└── REPRODUCE.md                              # 从数据转换到训练的完整复现指南
+```
+
+仓库只保存团队原创代码、配置、固定划分和复现文档；原始数据、基础模型权重与训练检查点通过官方来源下载，不直接提交到 Git。
+
 ## 2. 技术路线
 
 ```text
