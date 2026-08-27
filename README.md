@@ -2,7 +2,7 @@
 
 ![GOAI 2026 多任务双臂开源 VLA](assets/goai-dual-arm-hero.png)
 
-📖 [完整复现指南](REPRODUCE.md) · 配置、数据处理、固定划分、训练补丁与启动流程均已开源。
+📖 [完整复现指南](REPRODUCE.md) · [训练与真机前选模计划](TRAINING_AND_MODEL_SELECTION_PLAN.md)
 
 本项目以 **LingBot-VLA 2.0** 为主体模型，目标是在 GOAI 2026 决赛六项真实机器人任务中，让双 PIPER X 具备视觉理解、语言指令理解、空间推理、未来状态预测与双臂协同操作能力。
 
