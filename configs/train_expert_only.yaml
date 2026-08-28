@@ -63,7 +63,7 @@ train:
   data_parallel_mode: fsdp2
   enable_full_shard: false
   module_fsdp_enable: true
-  use_compile: true
+  use_compile: false
   use_wandb: false
   rmpad: false
   rmpad_with_pos_ids: false
@@ -80,12 +80,12 @@ train:
   lr_warmup_ratio: 0.05
   lr_decay_style: constant
   num_train_epochs: 29000
-  micro_batch_size: 4
+  micro_batch_size: 16
   gradient_accumulation_steps: 4
-  global_batch_size: 64
-  max_steps: 10000
+  global_batch_size: 128
+  max_steps: 8884
   ckpt_manager: dcp
-  save_steps: 1000
+  save_steps: 2221
   save_epochs: 29000
   enable_fp32: false
   enable_resume: true

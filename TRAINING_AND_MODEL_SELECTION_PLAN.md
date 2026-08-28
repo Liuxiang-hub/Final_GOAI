@@ -4,11 +4,11 @@
 
 ## 1. ⚡ 明日算力结论
 
-当前正式训练目标定义为 **10,000 optimizer steps**，不是完整 epoch。推荐租用：
+当前正式训练目标定义为 **2 epoch = 8,884 optimizer steps**。正式使用：
 
-> **4 × RTX 6000D 84GB，必须位于同一台服务器。**
+> **2 × RTX 6000D 84GB，位于同一台服务器。**
 
-规划时间为 **14–22 小时**，另预留约 2 小时用于环境检查、编译预热、冒烟测试、阶段验证和保存检查点。2 张卡可能需要 24–36 小时，不能保证一天内完成；8 张卡预计更快，但通信收益递减，成本效率通常不如 4 张。
+双卡10-step实测在预热后约为 **10秒/optimizer step**，2 epoch纯训练约24.7小时；加上加载、数据波动和四次检查点保存，计划约26–28小时。
 
 | RTX 6000D 数量 | 规划单步时间 | 10,000 steps 纯训练 | 加 10% 运行开销 | 一天内完成判断 |
 |---:|---:|---:|---:|---|
@@ -29,11 +29,11 @@
 steps_per_epoch = floor(568610 / B)
 ```
 
-当前 `global_batch_size = 64`：
+当前 `global_batch_size = 128`：
 
 ```text
-steps_per_epoch = floor(568610 / 64) = 8,884
-10,000 steps ≈ 1.126 epoch
+steps_per_epoch = floor(568610 / 128) = 4,442
+2 epoch = 8,884 steps
 ```
 
 完整 1 epoch 若要求一天结束，平均每个 optimizer step 必须满足：
@@ -71,7 +71,7 @@ t_N = t_1 / (N × η_N)
 
 此前两张 RTX 4080 SUPER 在 `torch.compile` 预热后的实测约为 **19.46 s/step**。它证明双卡链路和训练逻辑可运行，但不能直接当成 RTX 6000D 的速度；6000D 必须重新做短基准。
 
-## 3. 🖥️ 四卡配置原理
+## 3. 🖥️ 双卡配置原理
 
 建议保持优化目标不变：
 
@@ -81,37 +81,38 @@ train:
   train_expert_only: true
   train_state_proj: true
 
-  global_batch_size: 64
-  micro_batch_size: 4
+  global_batch_size: 128
+  micro_batch_size: 16
   gradient_accumulation_steps: 4
 
   enable_mixed_precision: true
   enable_fp32: false
   enable_gradient_checkpointing: true
-  use_compile: true
+  use_compile: false
 
   optimizer: muon
   lr: 1.0e-5
   lr_warmup_ratio: 0.05
-  max_steps: 10000
+  max_steps: 8884
+  save_steps: 2221
 ```
 
 原理：
 
-1. **global batch = 64**：4 卡、每卡 micro batch 4、累积 4 次；有效批量更大，梯度噪声更低，但每个 optimizer step 的耗时也会增加。
-2. **每卡 micro batch = 4**：优先提高单卡计算密度，必须通过完整前向、反向和优化器步骤的峰值显存测试。
+1. **global batch = 128**：2 卡、每卡 micro batch 16、累积4次，已通过真实数据10-step测试。
+2. **每卡 micro batch = 16**：峰值62.72GB/卡，预热后约10秒/optimizer step；保留约21GB物理显存余量。
 3. **Expert-only**：冻结 Qwen3-VL 和教师，只更新约 1.938B 动作侧参数，降低过拟合与优化器显存。
 4. **BF16/混合精度**：减少显存和 Tensor Core 计算时间；不使用全 FP32。
-5. **`torch.compile`**：双 4080 预热后从约 30.6 s/step 降至 19.46 s/step，收益约 36%；6000D 仍需验证算子兼容性。
-6. **同机四卡**：避免跨节点网络成为 FSDP/DDP 同步瓶颈。
+5. **暂不启用 `torch.compile`**：正式基线采用已经实测通过的 eager 路径，后续单独基准后再决定。
+6. **同机双卡**：避免跨节点网络成为 FSDP2 同步瓶颈。
 7. **DDP 与 FSDP2 实测二选一**：84GB 若能容纳 DDP 副本，DDP 通常通信更直接；若峰值显存不安全，再使用 FSDP2 full shard。选择以 100-step 基准为准。
 
-官方给出的4卡 A6000参考配置是每卡 `micro_batch_size=1`、accumulation=1、global batch=4，并说明每卡约需49GB显存。本项目的6000D配置把每卡 micro batch 提高到4，并累积4次，得到global batch 64；它必须先通过完整优化器步压力测试。若峰值显存超过安全线，立即回退为：
+官方4卡 A6000示例是每卡 `micro_batch_size=1`、accumulation=1、global batch=4。本项目依据双6000D 84GB实测使用global batch 128；若长期运行出现显存不稳定，回退为：
 
 ```yaml
-micro_batch_size: 1
-gradient_accumulation_steps: 16
-global_batch_size: 64
+micro_batch_size: 8
+gradient_accumulation_steps: 8
+global_batch_size: 128
 ```
 
 无论使用哪个组合，都必须满足官方公式：
@@ -131,7 +132,7 @@ global_batch_size = micro_batch_size × GPU数量 × gradient_accumulation_steps
 5. 分别跑 DDP 与 FSDP2 的 20-step 冒烟测试；
 6. 开启 compile，丢弃预热 steps 后测量连续 100 steps。
 
-选择满足以下条件的配置：无 OOM、无 NaN、四卡负载均衡、数据不等待，并且稳定单步时间不超过 **7.2 秒**。超过 7.2 秒意味着 10,000 steps 存在超出 22 小时的风险。
+正式配置已经通过10-step测试：无 OOM、无 NaN、双卡负载正常，稳定单步约10秒。长训前再执行100-step基准确认ETA。
 
 ### 阶段 B：正式训练
 
@@ -139,12 +140,12 @@ global_batch_size = micro_batch_size × GPU数量 × gradient_accumulation_steps
 |---:|---|
 | 0–50 | 冒烟；检查 loss、梯度、MoE 路由和显存 |
 | 500 | 首次趋势检查，不用于最终选模 |
-| 1,000 | 保存并运行六任务验证 |
-| 2,000–10,000 | 每 1,000 steps 保存一个候选检查点 |
-| 5,000 | 中期评估；若六任务整体恶化则提前停止 |
-| 10,000 | 第一阶段终点，不自动继续全参数训练 |
+| 2,221 | 0.5 epoch：保存并运行六任务验证 |
+| 4,442 | 1.0 epoch：中期评估 |
+| 6,663 | 1.5 epoch：保存候选检查点 |
+| 8,884 | 2.0 epoch：第一阶段终点，不自动继续全参数训练 |
 
-当前“按 epoch 保存”与 `max_steps = 10,000` 冲突，因为 1 epoch 是 71,076 steps。为了筛选模型，正式运行必须改为 **每 1,000 steps 保存**；筛选完成后只保留里程碑与入选检查点。
+正式训练每 **2,221 steps（0.5 epoch）** 保存一次，共四个候选检查点。按约43GB/检查点估算，训练前需保证至少220–250GB可用空间。
 
 ## 5. 🔎 真机前检查点筛选
 
@@ -206,7 +207,7 @@ Top-2 在双 PIPER 上执行：
 
 ## 6. 🏆 最终决策规则
 
-1. 明天默认目标是 **Expert-only 10,000 steps**；不启动第二阶段全参数训练。
-2. 推荐 **4 张 RTX 6000D 84GB**；开始 100-step 基准后重新计算 ETA。
-3. 若稳定速度 `≤ 7.2 s/step`，继续 10k；若更慢，立即优化数据读取/compile/并行策略，不能等到半程才发现超时。
+1. 默认目标是 **Expert-only 2 epoch（8,884 steps）**；不启动第二阶段全参数训练。
+2. 使用 **2 张 RTX 6000D 84GB**；开始100-step基准后重新计算ETA。
+3. 当前实测稳定速度约10秒/step，预计总排期26–28小时。
 4. 最终模型不按最低训练 loss 决定，而按“六任务平均 + 最差任务 + 安全稳定性 + 真机成功率”决定。
