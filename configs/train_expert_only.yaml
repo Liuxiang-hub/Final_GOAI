@@ -80,9 +80,9 @@ train:
   lr_warmup_ratio: 0.05
   lr_decay_style: constant
   num_train_epochs: 29000
-  micro_batch_size: 2
-  gradient_accumulation_steps: 1
-  global_batch_size: 8
+  micro_batch_size: 4
+  gradient_accumulation_steps: 4
+  global_batch_size: 64
   max_steps: 10000
   ckpt_manager: dcp
   save_steps: 1000

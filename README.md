@@ -114,7 +114,7 @@ L_total = L_flow_action
 
 其中动作 Flow Matching 是主目标；深度、未来深度和 DINO Video 约束模型理解当前几何与未来状态变化；sequence-wise loss 和 router z-loss 用于稳定稀疏 MoE 路由。教师网络不更新参数，也不在最终机器人推理端运行。
 
-推荐使用 Muon、`lr=1e-5`、5% warmup、混合精度、梯度检查点和 `torch.compile`。当前目标为 10,000 optimizer steps、`global_batch_size=8`。为支持选模，每 1,000 steps 保存并验证一次，而不是等待完整 epoch。
+推荐使用 Muon、`lr=1e-5`、5% warmup、混合精度、梯度检查点和 `torch.compile`。当前目标为 10,000 optimizer steps、`global_batch_size=64`。为支持选模，每 1,000 steps 保存并验证一次，而不是等待完整 epoch。
 
 ### 2.3 📊 评估方式
 
@@ -307,13 +307,13 @@ train:
   optimizer: muon
   lr: 1.0e-5
   lr_warmup_ratio: 0.05
-  micro_batch_size: 2
-  gradient_accumulation_steps: 1
-  global_batch_size: 8
+  micro_batch_size: 4
+  gradient_accumulation_steps: 4
+  global_batch_size: 64
   save_steps: 1000
 ```
 
-该配置面向 **4 × RTX 6000D 84GB**：`2 × 4 × 1 = global batch 8`。LingBot-VLA 会校验这个等式，不一致将直接报错。若完整 `forward + backward + optimizer.step` 压力测试无法容纳每卡 micro batch 2，则回退为 `micro_batch_size=1`、`gradient_accumulation_steps=2`，全局批量仍保持 8。
+该配置面向 **4 × RTX 6000D 84GB**：`4 × 4 × 4 = global batch 64`。LingBot-VLA 会校验这个等式，不一致将直接报错。若完整 `forward + backward + optimizer.step` 压力测试无法容纳每卡 micro batch 4，则回退为 `micro_batch_size=1`、`gradient_accumulation_steps=16`，全局批量仍保持 64。
 
 与官方 Real-World 模板相比，本项目保留 `meanstd`、MSE Flow Matching、FSDP2、`flex_cached`、fused MoE、Muon、三路相机和原生深度/未来视频监督；针对仅510条训练轨迹，改为 Expert-only、`lr=1e-5`、10,000 steps和每1,000 steps选模。配置依据：[LingBot-VLA 2.0 Training Configuration Guide](https://github.com/Robbyant/lingbot-vla-v2/blob/main/configs/vla/Training_Config.md#training-configuration-guide)。
 
@@ -334,7 +334,7 @@ train:
 steps_per_epoch = floor(568610 / global_batch_size)
 ```
 
-当 `global_batch_size = 8` 时，1 epoch = 71,076 steps；10,000 steps ≈ 0.141 epoch。项目以 step 和验证/真机表现选模，不机械追求完整 epoch 数。
+当 `global_batch_size = 64` 时，1 epoch = 8,884 steps；10,000 steps ≈ 1.126 epoch。项目以 step 和验证/真机表现选模，不机械追求完整 epoch 数。
 
 训练过程中持续检查总 loss、VLA loss、辅助教师 loss、梯度范数、MoE 路由均衡、吞吐量、显存峰值和六任务采样均衡性。
 

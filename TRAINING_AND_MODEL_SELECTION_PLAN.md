@@ -29,17 +29,17 @@
 steps_per_epoch = floor(568610 / B)
 ```
 
-当前 `global_batch_size = 8`：
+当前 `global_batch_size = 64`：
 
 ```text
-steps_per_epoch = floor(568610 / 8) = 71,076
-10,000 steps ≈ 0.141 epoch
+steps_per_epoch = floor(568610 / 64) = 8,884
+10,000 steps ≈ 1.126 epoch
 ```
 
 完整 1 epoch 若要求一天结束，平均每个 optimizer step 必须满足：
 
 ```text
-86,400 / 71,076 = 1.216 s/step
+86,400 / 8,884 = 9.726 s/step
 ```
 
 这远低于当前模型包含三路图像、动作 MoE、深度教师和视频教师时的实际单步开销，所以明天不以完整 epoch 为目标。
@@ -81,9 +81,9 @@ train:
   train_expert_only: true
   train_state_proj: true
 
-  global_batch_size: 8
-  micro_batch_size: 2
-  gradient_accumulation_steps: 1
+  global_batch_size: 64
+  micro_batch_size: 4
+  gradient_accumulation_steps: 4
 
   enable_mixed_precision: true
   enable_fp32: false
@@ -98,20 +98,20 @@ train:
 
 原理：
 
-1. **保持 global batch = 8**：沿用已经验证的优化尺度，避免因为加卡同时改变梯度统计和学习率语义。
-2. **每卡 micro batch = 2**：4 卡一次正好形成全局批量 8，取消梯度累积，减少重复前后向和同步等待。
+1. **global batch = 64**：4 卡、每卡 micro batch 4、累积 4 次；有效批量更大，梯度噪声更低，但每个 optimizer step 的耗时也会增加。
+2. **每卡 micro batch = 4**：优先提高单卡计算密度，必须通过完整前向、反向和优化器步骤的峰值显存测试。
 3. **Expert-only**：冻结 Qwen3-VL 和教师，只更新约 1.938B 动作侧参数，降低过拟合与优化器显存。
 4. **BF16/混合精度**：减少显存和 Tensor Core 计算时间；不使用全 FP32。
 5. **`torch.compile`**：双 4080 预热后从约 30.6 s/step 降至 19.46 s/step，收益约 36%；6000D 仍需验证算子兼容性。
 6. **同机四卡**：避免跨节点网络成为 FSDP/DDP 同步瓶颈。
 7. **DDP 与 FSDP2 实测二选一**：84GB 若能容纳 DDP 副本，DDP 通常通信更直接；若峰值显存不安全，再使用 FSDP2 full shard。选择以 100-step 基准为准。
 
-官方给出的4卡 A6000参考配置是每卡 `micro_batch_size=1`、accumulation=1、global batch=4，并说明每卡约需49GB显存。本项目的6000D性能配置把每卡 micro batch提高到2，以维持已验证的global batch 8并减少梯度累积；它必须先通过完整优化器步压力测试。若峰值显存超过安全线，立即回退为：
+官方给出的4卡 A6000参考配置是每卡 `micro_batch_size=1`、accumulation=1、global batch=4，并说明每卡约需49GB显存。本项目的6000D配置把每卡 micro batch 提高到4，并累积4次，得到global batch 64；它必须先通过完整优化器步压力测试。若峰值显存超过安全线，立即回退为：
 
 ```yaml
 micro_batch_size: 1
-gradient_accumulation_steps: 2
-global_batch_size: 8
+gradient_accumulation_steps: 16
+global_batch_size: 64
 ```
 
 无论使用哪个组合，都必须满足官方公式：
