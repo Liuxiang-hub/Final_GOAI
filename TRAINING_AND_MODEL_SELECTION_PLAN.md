@@ -106,6 +106,20 @@ train:
 6. **同机四卡**：避免跨节点网络成为 FSDP/DDP 同步瓶颈。
 7. **DDP 与 FSDP2 实测二选一**：84GB 若能容纳 DDP 副本，DDP 通常通信更直接；若峰值显存不安全，再使用 FSDP2 full shard。选择以 100-step 基准为准。
 
+官方给出的4卡 A6000参考配置是每卡 `micro_batch_size=1`、accumulation=1、global batch=4，并说明每卡约需49GB显存。本项目的6000D性能配置把每卡 micro batch提高到2，以维持已验证的global batch 8并减少梯度累积；它必须先通过完整优化器步压力测试。若峰值显存超过安全线，立即回退为：
+
+```yaml
+micro_batch_size: 1
+gradient_accumulation_steps: 2
+global_batch_size: 8
+```
+
+无论使用哪个组合，都必须满足官方公式：
+
+```text
+global_batch_size = micro_batch_size × GPU数量 × gradient_accumulation_steps
+```
+
 ## 4. 🗓️ 明日训练时间表
 
 ### 阶段 A：开跑前检查（约 45–90 分钟）
@@ -196,4 +210,3 @@ Top-2 在双 PIPER 上执行：
 2. 推荐 **4 张 RTX 6000D 84GB**；开始 100-step 基准后重新计算 ETA。
 3. 若稳定速度 `≤ 7.2 s/step`，继续 10k；若更慢，立即优化数据读取/compile/并行策略，不能等到半程才发现超时。
 4. 最终模型不按最低训练 loss 决定，而按“六任务平均 + 最差任务 + 安全稳定性 + 真机成功率”决定。
-

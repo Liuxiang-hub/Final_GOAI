@@ -300,6 +300,7 @@ train:
   freeze_vision_encoder: true
   train_expert_only: true
   train_state_proj: true
+  loss_type: fm
   enable_gradient_checkpointing: true
   enable_mixed_precision: true
   use_compile: true
@@ -307,9 +308,14 @@ train:
   lr: 1.0e-5
   lr_warmup_ratio: 0.05
   micro_batch_size: 2
-  gradient_accumulation_steps: 4
+  gradient_accumulation_steps: 1
   global_batch_size: 8
+  save_steps: 1000
 ```
+
+该配置面向 **4 × RTX 6000D 84GB**：`2 × 4 × 1 = global batch 8`。LingBot-VLA 会校验这个等式，不一致将直接报错。若完整 `forward + backward + optimizer.step` 压力测试无法容纳每卡 micro batch 2，则回退为 `micro_batch_size=1`、`gradient_accumulation_steps=2`，全局批量仍保持 8。
+
+与官方 Real-World 模板相比，本项目保留 `meanstd`、MSE Flow Matching、FSDP2、`flex_cached`、fused MoE、Muon、三路相机和原生深度/未来视频监督；针对仅510条训练轨迹，改为 Expert-only、`lr=1e-5`、10,000 steps和每1,000 steps选模。配置依据：[LingBot-VLA 2.0 Training Configuration Guide](https://github.com/Robbyant/lingbot-vla-v2/blob/main/configs/vla/Training_Config.md#training-configuration-guide)。
 
 ### 6.2 🧪 执行顺序
 
@@ -396,4 +402,3 @@ steps_per_epoch = floor(568610 / global_batch_size)
 </table>
 
 > 展示素材来自 GOAI 官方真实机器人演示数据，顶部相机视角，统一为 480 × 360、10 FPS 动画预览。
-
