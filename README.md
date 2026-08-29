@@ -114,7 +114,7 @@ L_total = L_flow_action
 
 其中动作 Flow Matching 是主目标；深度、未来深度和 DINO Video 约束模型理解当前几何与未来状态变化；sequence-wise loss 和 router z-loss 用于稳定稀疏 MoE 路由。教师网络不更新参数，也不在最终机器人推理端运行。
 
-推荐使用 Muon、`lr=1e-5`、5% warmup、BF16 和梯度检查点。当前目标为 2 epoch（8,884 optimizer steps）、`global_batch_size=128`，每 0.5 epoch（2,221 steps）保存并验证一次。
+本次正式训练使用 Muon、`lr=1e-5`、5% warmup、BF16、梯度检查点和 `global_batch_size=128`，完成 4,000 optimizer steps（约 0.90 standard epoch）。训练保存并验证了 step 2,221 / 2,500 / 3,000 / 3,500 / 4,000 五个候选检查点，所有最终候选均保留完整可续训状态。
 
 ### 2.3 📊 评估方式
 
@@ -127,6 +127,22 @@ L_total = L_flow_action
 5. **真机筛选**：Top-3 先做动作反归一化、关节限位和低速空载回放，再直接进入双 PIPER；先每模型每任务 3 次初筛，再对 Top-2 每模型每任务至少 5 次正式测试。
 
 真机最终记录六任务成功率、最差任务成功率、完成时间、人工急停、碰撞/越界、动作平滑性和推理延迟。最终模型按安全性和六任务稳定成功率选择，不按最低训练 loss 单独决定。
+
+### 2.4 📈 训练与模型筛选可视化
+
+#### Training Dynamics
+
+下图覆盖完整的 1–4,000 optimizer steps。蓝线为核心 `VLA_Loss`，橙线为包含辅助监督项的总 Loss；底部同时给出 optimizer step 与 standard epoch（4,442 steps = 1 epoch）。淡色轨迹表示逐 step 原始值，实线表示 50-step 滑动平均。
+
+![LingBot-VLA 2.0 Training Loss Curves](assets/evaluation/training_loss_curves.png)
+
+#### Model Selection Dashboard
+
+五个候选模型统一在 60 条 validation episodes 上比较，冻结测试集仅对最终选中的 step 4,000 运行一次。step 4,000 获得最低验证 MAE，并作为当前部署候选；step 3,500 保留为真机 A/B 备用模型。
+
+![GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
+
+> 离线 Action MSE/MAE 用于候选筛选，不等同于真机任务成功率。最终结论仍以双 PIPER 闭环真机成功率、安全性和最差任务表现为准。
 
 ## 3. ✨ LingBot-VLA 2.0 核心优势与能力
 
