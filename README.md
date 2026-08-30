@@ -19,6 +19,7 @@
 | 动作生成 | 36 层稀疏动作 MoE，32 experts，Top-4 |
 | 视觉输入 | 顶部、左腕、右腕三路相机 |
 | 动作窗口 | 未来 50 steps |
+| 真机重规划周期 | 执行 25 steps 后重新观测并推理 |
 | 当前策略 | 冻结 VLM 与教师，训练动作 MoE、投影层和对齐头 |
 
 ### 🗂️ 项目目录结构
@@ -39,10 +40,12 @@ Final_GOAI/
 │   └── lingbot-vla-v2/
 │       └── episode_split_loader.patch       # 训练加载器严格限制到指定 episodes
 ├── scripts/
-│   └── data/
-│       ├── convert_real_hdf5_to_lerobot_v30_joint.py
-│       ├── create_lerobot_episode_splits.py
-│       └── validate_lerobot_v30_joint.py
+│   ├── data/
+│   │   ├── convert_real_hdf5_to_lerobot_v30_joint.py
+│   │   ├── create_lerobot_episode_splits.py
+│   │   └── validate_lerobot_v30_joint.py
+│   └── deploy/
+│       └── start_lingbot_vla_v2_server.sh      # 25-step 闭环重规划推理入口
 ├── splits/
 │   ├── episode_splits_seed2026.json         # 完整、可审计的固定划分清单
 │   ├── train_episodes.txt                    # 510 episodes
@@ -184,6 +187,7 @@ LingBot-VLA 2.0 不是简单的“看图后回归关节值”，而是把语言�
 | 预测式世界动态 | 预测未来深度和视频表征作为辅助目标 | 强化双臂配合、抓取状态判断和长时序操作 |
 | Flow Matching | 从噪声轨迹逐步生成连续动作分布 | 能表达多种合理操作轨迹，不局限于单一均值动作 |
 | 50-step Action Chunk | 单次输出连续动作窗口 | 提高短时动作连贯性，降低闭环推理频率 |
+| 25-step Closed-loop Replan | 每次只执行预测块前 25 步，然后重新采集图像与状态 | 减少长开环漂移、时序滞后和接触误差累积 |
 | 多视角融合 | 联合顶部与左右腕部相机 | 同时掌握全局布局和双手局部接触细节 |
 
 ### 3.1 🧩 统一 55 维动作/状态表示
@@ -379,7 +383,7 @@ train:
 steps_per_epoch = floor(568610 / global_batch_size)
 ```
 
-当 `global_batch_size = 128` 时，1 epoch = 4,442 steps；2 epoch = 8,884 steps。项目在2,221 / 4,442 / 6,663 / 8,884 steps保存四个候选检查点。
+当 `global_batch_size = 128` 时，1 epoch = 4,442 steps；2 epoch = 8,884 steps。项目在 2,221 / 3,332 / 4,442 / 5,553 / 6,663 / 7,774 / 8,884 steps 保存七个候选检查点。
 
 训练过程中持续检查总 loss、VLA loss、辅助教师 loss、梯度范数、MoE 路由均衡、吞吐量、显存峰值和六任务采样均衡性。
 
@@ -402,6 +406,30 @@ steps_per_epoch = floor(568610 / global_batch_size)
 - `joint_delta` 正确转换为机器人控制指令；
 - 设置关节限位、速度/加速度限制、急停和通信超时保护；
 - 先低速、短动作窗口和人工急停监护，再提高执行速度。
+
+### 7.1 25-step 闭环重规划
+
+模型仍按训练配置预测完整的 50-step action chunk，部署端只取前 25 步执行。执行完成后必须重新采集顶部、左腕、右腕图像和双臂状态，再请求下一段动作；不要连续执行旧预测的后 25 步。
+
+```bash
+cd /path/to/lingbot-vla-v2
+export MODEL_PATH=/path/to/global_step_6663/hf_ckpt
+export EXECUTION_HORIZON=25
+bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
+```
+
+该入口等价于官方 V2 推理参数：
+
+```bash
+python -m deploy.lingbot_vla_v2_policy \
+  --model_path "$MODEL_PATH" \
+  --use_length 25 \
+  --chunk_ret true \
+  --use_bf16 true \
+  --use_compile true
+```
+
+在 25 FPS 数据/控制频率下，25 steps 约为 1 秒。真机首次调试建议保持低速与动作限幅；如果接触任务仍出现明显漂移，可进一步 A/B 测试 10–15 steps，但不修改模型的训练 `chunk_size=50`。
 
 ## 8. 🌐 全部开源说明
 
