@@ -19,7 +19,7 @@
 | 动作生成 | 36 层稀疏动作 MoE，32 experts，Top-4 |
 | 视觉输入 | 顶部、左腕、右腕三路相机 |
 | 动作窗口 | 未来 50 steps |
-| 真机重规划周期 | 执行 25 steps 后重新观测并推理 |
+| 真机重规划周期 | 执行 15 steps 后重新观测并推理，跨 chunk 融合 5 steps |
 | 当前策略 | 冻结 VLM 与教师，训练动作 MoE、投影层和对齐头 |
 
 ### 🗂️ 项目目录结构
@@ -45,7 +45,8 @@ Final_GOAI/
 │   │   ├── create_lerobot_episode_splits.py
 │   │   └── validate_lerobot_v30_joint.py
 │   └── deploy/
-│       └── start_lingbot_vla_v2_server.sh      # 25-step 闭环重规划推理入口
+│       ├── start_lingbot_vla_v2_server.sh      # 15-step 闭环重规划推理入口
+│       └── action_chunk_blender.py              # 5-step 余弦跨 chunk 融合
 ├── splits/
 │   ├── episode_splits_seed2026.json         # 完整、可审计的固定划分清单
 │   ├── train_episodes.txt                    # 510 episodes
@@ -187,7 +188,7 @@ LingBot-VLA 2.0 不是简单的“看图后回归关节值”，而是把语言�
 | 预测式世界动态 | 预测未来深度和视频表征作为辅助目标 | 强化双臂配合、抓取状态判断和长时序操作 |
 | Flow Matching | 从噪声轨迹逐步生成连续动作分布 | 能表达多种合理操作轨迹，不局限于单一均值动作 |
 | 50-step Action Chunk | 单次输出连续动作窗口 | 提高短时动作连贯性，降低闭环推理频率 |
-| 25-step Closed-loop Replan | 每次只执行预测块前 25 步，然后重新采集图像与状态 | 减少长开环漂移、时序滞后和接触误差累积 |
+| 15-step Closed-loop Replan | 每次执行 15 步后重新采集图像与状态，并跨 chunk 融合 5 步 | 减少长开环漂移、时序滞后和动作块边界跳变 |
 | 多视角融合 | 联合顶部与左右腕部相机 | 同时掌握全局布局和双手局部接触细节 |
 
 ### 3.1 🧩 统一 55 维动作/状态表示
@@ -407,14 +408,15 @@ steps_per_epoch = floor(568610 / global_batch_size)
 - 设置关节限位、速度/加速度限制、急停和通信超时保护；
 - 先低速、短动作窗口和人工急停监护，再提高执行速度。
 
-### 7.1 25-step 闭环重规划
+### 7.1 15-step 闭环重规划与 5-step 融合
 
-模型仍按训练配置预测完整的 50-step action chunk，部署端只取前 25 步执行。执行完成后必须重新采集顶部、左腕、右腕图像和双臂状态，再请求下一段动作；不要连续执行旧预测的后 25 步。
+模型仍按训练配置预测完整的 50-step action chunk。服务端每次返回前 20 步：客户端执行其中 15 步，保留后 5 步；重新采集顶部、左腕、右腕图像与双臂状态并获得新 chunk 后，将旧 chunk 保留的 5 步与新 chunk 前 5 步做余弦融合，再继续执行。这样每次实际执行仍为 15 步。
 
 ```bash
 cd /path/to/lingbot-vla-v2
 export MODEL_PATH=/path/to/global_step_6663/hf_ckpt
-export EXECUTION_HORIZON=25
+export EXECUTION_HORIZON=15
+export CHUNK_BLEND_STEPS=5
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```
 
@@ -423,13 +425,13 @@ bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```bash
 python -m deploy.lingbot_vla_v2_policy \
   --model_path "$MODEL_PATH" \
-  --use_length 25 \
+  --use_length 20 \
   --chunk_ret true \
   --use_bf16 true \
   --use_compile true
 ```
 
-在 25 FPS 数据/控制频率下，25 steps 约为 1 秒。真机首次调试建议保持低速与动作限幅；如果接触任务仍出现明显漂移，可进一步 A/B 测试 10–15 steps，但不修改模型的训练 `chunk_size=50`。
+机器人客户端需要使用 `scripts/deploy/action_chunk_blender.py` 中的 `ActionChunkBlender(execute_steps=15, blend_steps=5)` 处理服务端返回值。在 25 FPS 数据/控制频率下，每 15 steps 约 0.6 秒重新规划一次；模型的训练 `chunk_size=50` 保持不变。
 
 ## 8. 🌐 全部开源说明
 
