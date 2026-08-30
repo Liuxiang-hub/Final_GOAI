@@ -114,7 +114,7 @@ L_total = L_flow_action
 
 其中动作 Flow Matching 是主目标；深度、未来深度和 DINO Video 约束模型理解当前几何与未来状态变化；sequence-wise loss 和 router z-loss 用于稳定稀疏 MoE 路由。教师网络不更新参数，也不在最终机器人推理端运行。
 
-本次正式训练使用 Muon、`lr=1e-5`、5% warmup、BF16、梯度检查点和 `global_batch_size=128`，完成 4,000 optimizer steps（约 0.90 standard epoch）。训练保存并验证了 step 2,221 / 2,500 / 3,000 / 3,500 / 4,000 五个候选检查点，所有最终候选均保留完整可续训状态。
+本次正式训练使用 Muon、`lr=1e-5`、5% warmup、BF16、梯度检查点和 `global_batch_size=128`，在 2 张 RTX 6000D 上完成 **8,884 optimizer steps（2.00 standard epochs）**。训练保存并验证了 step 2,221 / 3,332 / 4,442 / 5,553 / 6,663 / 7,774 / 8,884 七个候选检查点，所有候选均保留完整可续训状态。
 
 ### 2.3 📊 评估方式
 
@@ -132,15 +132,42 @@ L_total = L_flow_action
 
 #### Training Dynamics
 
-下图覆盖完整的 1–4,000 optimizer steps。蓝线为核心 `VLA_Loss`，橙线为包含辅助监督项的总 Loss；底部同时给出 optimizer step 与 standard epoch（4,442 steps = 1 epoch）。淡色轨迹表示逐 step 原始值，实线表示 50-step 滑动平均。
+下图展示本次 2-epoch 正式训练。蓝线为核心 `VLA_Loss`，橙线为包含辅助监督项的总 Loss；横轴同时给出 standard epoch 与 optimizer step（4,442 steps = 1 epoch），曲线为 50-step 滑动平均。本地保存的连续逐 step 日志覆盖 step 1–8,246，绿色终点为训练结束时独立核验的 step 8,884 指标（`VLA_Loss=0.0504`），中间缺失区间不进行插值伪造。
 
 ![LingBot-VLA 2.0 Training Loss Curves](assets/evaluation/training_loss_curves.png)
 
 #### Model Selection Dashboard
 
-五个候选模型统一在 60 条 validation episodes 上比较，冻结测试集仅对最终选中的 step 4,000 运行一次。step 4,000 获得最低验证 MAE，并作为当前部署候选；step 3,500 保留为真机 A/B 备用模型。
+七个候选模型均在 30 条 held-out episodes 上完成相同的六任务开环评估（每任务 5 条）。`global_step_6663` 在 1.50 epoch 获得最低整体 MSE，并作为当前主部署候选；`global_step_8884` 获得最低 MAE 与最低速度误差，保留为真机平滑性 A/B 备用模型。
 
 ![GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
+
+#### Held-out Loss Trend
+
+![GOAI Checkpoint Test Loss Curve](assets/evaluation/checkpoint_test_loss_curve.svg)
+
+| Checkpoint | Epoch | Test MSE ↓ | Test MAE ↓ | Velocity RMSE ↓ | 结论 |
+|---:|---:|---:|---:|---:|---|
+| 2,221 | 0.50 | 0.02019 | 0.06971 | 0.04977 | 候选 |
+| 3,332 | 0.75 | 0.01828 | 0.06517 | 0.04557 | 候选 |
+| 4,442 | 1.00 | 0.01687 | 0.06153 | 0.04188 | 候选 |
+| 5,553 | 1.25 | 0.01543 | 0.05835 | 0.03893 | 候选 |
+| **6,663** | **1.50** | **0.01535** | 0.05668 | 0.03781 | **主模型：最低 MSE** |
+| 7,774 | 1.75 | 0.01603 | 0.05637 | 0.03605 | 候选 |
+| **8,884** | **2.00** | 0.01588 | **0.05579** | **0.03528** | **平滑备选** |
+
+`global_step_6663` 六任务结果：
+
+| Task | MSE ↓ | MAE ↓ | Velocity RMSE ↓ |
+|---|---:|---:|---:|
+| Fill Pen Holder | 0.01489 | 0.05694 | 0.03855 |
+| Insert Charger | **0.01174** | 0.05431 | **0.03522** |
+| Put Objects Into Basket | 0.01403 | 0.05990 | 0.03706 |
+| Stack and Cover Blocks | 0.01444 | 0.05804 | 0.03784 |
+| Stack Bowls | 0.02167 | 0.06147 | 0.03834 |
+| Stand Up Bottles | 0.01534 | **0.04943** | 0.03983 |
+
+> 当前训练在 1.50 epoch 后进入平台期，并出现任务间取舍，因此暂不继续盲目增加 epoch。下一阶段优先进行低速、限幅、短执行窗口的双 PIPER 闭环真机验证。
 
 > 离线 Action MSE/MAE 用于候选筛选，不等同于真机任务成功率。最终结论仍以双 PIPER 闭环真机成功率、安全性和最差任务表现为准。
 
