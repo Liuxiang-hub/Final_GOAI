@@ -9,7 +9,8 @@ import numpy as np
 class ActionChunkBlender:
     """Replan every ``execute_steps`` and cosine-blend the chunk boundary.
 
-    The policy server must return at least ``execute_steps + blend_steps``.
+    The policy server returns the full 50-step model prediction and must return
+    at least ``execute_steps + blend_steps``.
     The returned dictionary keeps the action feature keys used by LingBot-VLA.
     """
 

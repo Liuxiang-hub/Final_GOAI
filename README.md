@@ -410,7 +410,7 @@ steps_per_epoch = floor(568610 / global_batch_size)
 
 ### 7.1 15-step 闭环重规划与 5-step 融合
 
-模型仍按训练配置预测完整的 50-step action chunk。服务端每次返回前 20 步：客户端执行其中 15 步，保留后 5 步；重新采集顶部、左腕、右腕图像与双臂状态并获得新 chunk 后，将旧 chunk 保留的 5 步与新 chunk 前 5 步做余弦融合，再继续执行。这样每次实际执行仍为 15 步。
+模型按训练配置预测完整的 50-step action chunk，服务端也每次返回完整 50 步。客户端只执行前 15 步，并保留旧 chunk 的第 16–20 步；随后重新采集顶部、左腕、右腕图像与双臂状态，请求新的完整 50-step chunk，将旧 chunk 保留的 5 步与新 chunk 前 5 步做余弦融合，再继续执行。这样每次实际执行仍为 15 步。
 
 ```bash
 cd /path/to/lingbot-vla-v2
@@ -425,7 +425,7 @@ bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```bash
 python -m deploy.lingbot_vla_v2_policy \
   --model_path "$MODEL_PATH" \
-  --use_length 20 \
+  --use_length 50 \
   --chunk_ret true \
   --use_bf16 true \
   --use_compile true
