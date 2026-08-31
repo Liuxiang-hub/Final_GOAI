@@ -7,13 +7,7 @@ set -euo pipefail
 
 model_path="${MODEL_PATH:?Set MODEL_PATH to the selected hf_ckpt directory}"
 port="${PORT:-8006}"
-execution_horizon="${EXECUTION_HORIZON:-15}"
 prediction_horizon=50
-
-if (( execution_horizon < 1 || execution_horizon > prediction_horizon )); then
-  echo "Require 1 <= EXECUTION_HORIZON <= 50." >&2
-  exit 2
-fi
 
 test -s "${model_path}/model.safetensors.index.json"
 

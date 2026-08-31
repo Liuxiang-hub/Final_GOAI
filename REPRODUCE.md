@@ -75,11 +75,10 @@ python tasks/vla/train_lingbotvla.py --config configs/vla/real_robot/goai_piper_
 ```bash
 cd /path/to/lingbot-vla-v2
 export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
-export EXECUTION_HORIZON=15
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```
 
-在连接机械臂前，必须依次完成输出维度、反归一化、关节顺序/单位/方向、夹爪范围、限位、速度/加速度、通信超时和急停验证。先空载低速运行，再逐任务闭环测试。离线最优不等于真机成功率最优。
+服务端启动脚本只返回完整50-step chunk；15-step截断与时序后处理必须在机器人客户端显式接入 `scripts/deploy/action_chunk_blender.py`，并按 `configs/deploy_temporal_adaptive.yaml` 配置。在连接机械臂前，必须依次完成输出维度、反归一化、关节顺序/单位/方向、夹爪范围、限位、速度/加速度、通信超时和急停验证。先空载低速运行，再逐任务闭环测试。离线最优不等于真机成功率最优。
 
 ## 6. 🔐 安全与许可证
 

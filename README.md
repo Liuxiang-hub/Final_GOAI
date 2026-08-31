@@ -39,6 +39,7 @@ Final_GOAI/
 │   ├── goai_piper_x.yaml                    # 双 PIPER 关节、夹爪与三相机映射
 │   ├── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
 │   ├── deploy_temporal_adaptive.yaml        # 当前离线部署后处理参数
+│   ├── deploy_temporal_consensus_experimental.yaml # 当前参数的可追溯实验副本
 │   └── selected_model.yaml                  # step 8884 最终离线选择结论与指标
 ├── patches/
 │   └── lingbot-vla-v2/
@@ -49,8 +50,10 @@ Final_GOAI/
 │   │   ├── create_lerobot_episode_splits.py
 │   │   └── validate_lerobot_v30_joint.py
 │   └── deploy/
-│       ├── start_lingbot_vla_v2_server.sh      # 15-step 闭环重规划推理入口
-│       └── action_chunk_blender.py              # 时序集成、共识门控、自适应 EMA 与振荡抑制
+│       ├── start_lingbot_vla_v2_server.sh      # 启动模型服务端，始终返回完整 50-step chunk
+│       ├── action_chunk_blender.py              # 客户端 15-step 重规划与当前自适应后处理
+│       └── temporal_ensemble_filter.py           # 时序集成基础实现
+├── scripts/render_historical_dashboard.py       # 重绘历史 500-frame 初筛仪表盘
 ├── splits/
 │   ├── episode_splits_seed2026.json         # 完整、可审计的固定划分清单
 │   ├── train_episodes.txt                    # 510 episodes
@@ -59,7 +62,8 @@ Final_GOAI/
 │   └── SHA256SUMS                            # 划分文件完整性校验
 ├── .gitignore                                # 排除数据、权重、检查点、日志与缓存
 ├── README.md                                 # 项目总览
-└── REPRODUCE.md                              # 从数据转换到训练的完整复现指南
+├── REPRODUCE.md                              # 从数据转换到训练的完整复现指南
+└── TRAINING_AND_MODEL_SELECTION_PLAN.md      # 已执行训练、选模与待完成真机计划
 ```
 
 仓库只保存团队原创代码、配置、固定划分和复现文档；原始数据、基础模型权重与训练检查点通过官方来源下载，不直接提交到 Git。
@@ -129,10 +133,10 @@ L_total = L_flow_action
 评估分为训练健康、离线六任务验证和双 PIPER 真机三层：
 
 1. **训练健康**：检查 NaN/Inf、总 loss、动作 loss、辅助 loss、梯度范数、显存、吞吐量、MoE 路由熵和专家使用率；出现专家塌缩、动作越界或 loss 突跳的检查点直接淘汰。
-2. **离线验证**：只使用 60 条 validation episodes，分别计算六任务 action MAE/RMSE、50-step 轨迹 ADE/FDE、夹爪开闭正确率、速度/加速度/jerk、动作越界率、辅助教师 loss 和推理延迟。
+2. **离线验证**：只使用 60 条 validation episodes，实际计算六任务 action MSE/MAE、Velocity RMSE、静止段速度 RMS、Jerk RMS、Jerk P99.9 和最差任务 MSE；所有候选均运行完整 episode，并使用相同的部署后处理参数。
 3. **候选排序**：综合惩罚权重为 MSE 25%、MAE 20%、最差任务MSE 15%、Velocity RMSE 15%、静止段速度RMS 10%、Jerk RMS 10%、Jerk P99.9 5%，所有指标越低越好。
 4. **冻结测试**：由60条完整 validation episodes 选出 `global_step_8884` 并冻结模型与后处理后，30条 test episodes 各运行一次完整序列；结果仅用于最终报告，不再调参。由于这30条在流程纠正前曾用于前500帧快速初筛，本次完整测试属于冻结后的全长度确认，但不能宣称为从未观察过的严格独立测试。
-5. **真机筛选**：Top-3 先做动作反归一化、关节限位和低速空载回放，再直接进入双 PIPER；先每模型每任务 3 次初筛，再对 Top-2 每模型每任务至少 5 次正式测试。
+5. **真机验证（待完成）**：当前唯一候选 `global_step_8884` 先做动作反归一化、关节限位和低速空载回放，再进入双 PIPER 闭环测试；离线落选模型不再占用真机试验预算。
 
 真机最终记录六任务成功率、最差任务成功率、完成时间、人工急停、碰撞/越界、动作平滑性和推理延迟。最终模型按安全性和六任务稳定成功率选择，不按最低训练 loss 单独决定。
 
@@ -146,7 +150,7 @@ L_total = L_flow_action
 
 #### Model Selection Dashboard
 
-第一阶段曾以30条 held-out episodes 的前500帧对七个checkpoint进行快速初筛：`global_step_6663` 获得最低阶段性MSE，`global_step_8884` 获得最低阶段性MAE与速度误差。该图仅保留为可审计的历史初筛记录，不代表完整episode最终选择。
+第一阶段曾以30条 test episodes 的前500帧对七个checkpoint进行快速初筛：`global_step_6663` 获得最低阶段性MSE，`global_step_8884` 获得最低阶段性MAE与速度误差。该用法后来被纠正，图中明确标记为历史筛选记录；它不代表完整episode最终选择，也不作为当前选模依据。
 
 ![GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
 
@@ -162,9 +166,9 @@ The overview below uses the lowest-MSE full test episode from each of the six ta
 
 #### Historical 500-Frame Screening Trend
 
-![GOAI Checkpoint Test Loss Curve](assets/evaluation/checkpoint_test_loss_curve.svg)
+![GOAI Historical Checkpoint Screening Curve](assets/evaluation/checkpoint_test_loss_curve.svg)
 
-| Checkpoint | Epoch | Test MSE ↓ | Test MAE ↓ | Velocity RMSE ↓ | 结论 |
+| Checkpoint | Epoch | Screening MSE ↓ | Screening MAE ↓ | Velocity RMSE ↓ | 历史初筛结论 |
 |---:|---:|---:|---:|---:|---|
 | 2,221 | 0.50 | 0.02019 | 0.06971 | 0.04977 | 候选 |
 | 3,332 | 0.75 | 0.01828 | 0.06517 | 0.04557 | 候选 |
@@ -365,7 +369,6 @@ train:
   loss_type: fm
   enable_gradient_checkpointing: true
   enable_mixed_precision: true
-  use_compile: true
   optimizer: muon
   lr: 1.0e-5
   lr_warmup_ratio: 0.05
@@ -379,7 +382,7 @@ train:
 
 该配置面向 **2 × RTX 6000D 84GB**：`16 × 2 × 4 = global batch 128`。双卡10-step实测峰值为62.72GB/卡，预热后约10秒/optimizer step。若长期训练显存不稳，则回退为 `micro_batch_size=8`、`gradient_accumulation_steps=8`，全局批量仍保持128。
 
-与官方 Real-World 模板相比，本项目保留 `meanstd`、MSE Flow Matching、FSDP2、`flex_cached`、fused MoE、Muon、三路相机和原生深度/未来视频监督；针对仅510条训练轨迹，改为 Expert-only、`lr=1e-5`、10,000 steps和每1,000 steps选模。配置依据：[LingBot-VLA 2.0 Training Configuration Guide](https://github.com/Robbyant/lingbot-vla-v2/blob/main/configs/vla/Training_Config.md#training-configuration-guide)。
+与官方 Real-World 模板相比，本项目保留 `meanstd`、MSE Flow Matching、FSDP2、`flex_cached`、fused MoE、Muon、三路相机和原生深度/未来视频监督；针对仅510条训练轨迹，采用 Expert-only、`lr=1e-5`、8,884 steps（2.00 standard epochs）和七个固定候选保存点。配置依据：[LingBot-VLA 2.0 Training Configuration Guide](https://github.com/Robbyant/lingbot-vla-v2/blob/main/configs/vla/Training_Config.md#training-configuration-guide)。
 
 ### 6.2 🧪 执行顺序
 
@@ -387,8 +390,8 @@ train:
 2. 校验所有基础权重与配置路径；
 3. 执行单步正向、反向和优化器压力测试；
 4. 运行 20–50 steps 冒烟训练；
-5. 运行 1,000 steps 阶段检查；
-6. 保存并评估 5,000 / 10,000 steps 候选检查点；
+5. warmup 至约 step 444，并持续检查学习率、loss、梯度范数与 MoE 路由；
+6. 在 2,221 / 3,332 / 4,442 / 5,553 / 6,663 / 7,774 / 8,884 steps 保存可续训检查点；
 7. 按六项任务分别统计验证结果；
 8. 依据离线与真机表现决定停止、续训或调整。
 
@@ -410,7 +413,7 @@ steps_per_epoch = floor(568610 / global_batch_size)
    ├─ 离线验证：六任务分项 loss、动作误差、轨迹可视化
    ├─ 冻结测试：仅对入选检查点运行一次测试集
    ├─ 安全回放：反归一化、关节限位、速度和动作连续性
-   └─ 双 PIPER：低速空载 → Top-3 单任务初筛 → Top-2 六任务复测
+   └─ 双 PIPER（待完成）：step8884 低速空载 → 六任务闭环验证
 ```
 
 部署前必须完成：
@@ -429,7 +432,6 @@ steps_per_epoch = floor(568610 / global_batch_size)
 ```bash
 cd /path/to/lingbot-vla-v2
 export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
-export EXECUTION_HORIZON=15
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```
 
@@ -444,7 +446,7 @@ python -m deploy.lingbot_vla_v2_policy \
   --use_compile true
 ```
 
-机器人客户端使用 `scripts/deploy/action_chunk_blender.py` 中的 `ActionChunkBlender` 处理服务端返回的完整 50-step action chunk。在 25 FPS 数据/控制频率下，每执行 15 steps（约 0.6 秒）重新观测和推理；正式离线候选参数见 `configs/deploy_temporal_adaptive.yaml`，模型选择元数据见 `configs/selected_model.yaml`。
+机器人客户端必须显式接入 `scripts/deploy/action_chunk_blender.py` 中的 `ActionChunkBlender`，并按 `configs/deploy_temporal_adaptive.yaml` 实例化；服务端启动脚本本身只负责返回完整 50-step action chunk，不会替客户端截断或滤波。在 25 FPS 数据/控制频率下，客户端每执行 15 steps（约 0.6 秒）重新观测和推理；模型选择元数据见 `configs/selected_model.yaml`。
 
 当前离线候选配置使用一致性门控，并用 7-step 窗口识别至少 3 次小幅方向反转；机械臂/夹爪识别阈值分别为 `0.030/0.100`，触发时使用 `alpha=0.05`。六任务完整离线回放中，微振荡总幅度下降约 44.95%，静止段抖动下降约 2.39%，Jerk RMS 下降约 1.97%，MSE 增加约 0.26%。`configs/deploy_temporal_consensus_experimental.yaml` 仅作为同参数的 A/B 追溯副本。该配置仍需确认滤波所处坐标系并完成低速真机验证；累积死区默认关闭，避免“保持—跳变”台阶。
 
