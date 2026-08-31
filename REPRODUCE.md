@@ -70,11 +70,11 @@ python tasks/vla/train_lingbotvla.py --config configs/vla/real_robot/goai_piper_
 
 ## 5. 🤖 部署当前离线候选
 
-当前离线选择为 `global_step_7774`（1.75 epoch），选择依据与完整指标见 `configs/selected_model.yaml` 和 `assets/evaluation/full_episode_checkpoint_comparison.json`。服务端仍返回完整 50-step chunk；客户端执行 15 步后重观测，并按 `configs/deploy_temporal_adaptive.yaml` 使用四块时序集成、共识门控、自适应 EMA 和振荡抑制。
+当前最终离线选择为 `global_step_8884`（2.00 epoch）：三个候选在60条完整验证episode上统一评估后选出，冻结模型与后处理，再由30条完整测试episode一次性确认。指标见 `configs/selected_model.yaml`、`assets/evaluation/validation60_three_checkpoint_summary.json` 和 `assets/evaluation/test30_full_step8884_summary.json`。服务端仍返回完整50-step chunk；客户端执行15步后重观测，并按 `configs/deploy_temporal_adaptive.yaml` 使用四块时序集成、共识门控、自适应EMA和振荡抑制。
 
 ```bash
 cd /path/to/lingbot-vla-v2
-export MODEL_PATH=/path/to/global_step_7774/hf_ckpt
+export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
 export EXECUTION_HORIZON=15
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```

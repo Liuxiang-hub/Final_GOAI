@@ -15,7 +15,7 @@
 | 演示数据 | 600 episodes，666,002 frames，25 FPS |
 | 数据划分 | Train / Validation / Test = 510 / 60 / 30 |
 | 主模型 | LingBot-VLA 2.0 6B |
-| 当前离线部署候选 | `global_step_7774`（1.75 standard epochs，待真机闭环确认） |
+| 当前真机候选 | `global_step_8884`（2.00 standard epochs；60条完整验证选出，30条完整测试确认） |
 | 视觉语言骨干 | Qwen3-VL-4B-Instruct |
 | 动作生成 | 36 层稀疏动作 MoE，32 experts，Top-4 |
 | 视觉输入 | 顶部、左腕、右腕三路相机 |
@@ -39,7 +39,7 @@ Final_GOAI/
 │   ├── goai_piper_x.yaml                    # 双 PIPER 关节、夹爪与三相机映射
 │   ├── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
 │   ├── deploy_temporal_adaptive.yaml        # 当前离线部署后处理参数
-│   └── selected_model.yaml                  # step 7774 选择结论与完整指标
+│   └── selected_model.yaml                  # step 8884 最终离线选择结论与指标
 ├── patches/
 │   └── lingbot-vla-v2/
 │       └── episode_split_loader.patch       # 训练加载器严格限制到指定 episodes
@@ -130,8 +130,8 @@ L_total = L_flow_action
 
 1. **训练健康**：检查 NaN/Inf、总 loss、动作 loss、辅助 loss、梯度范数、显存、吞吐量、MoE 路由熵和专家使用率；出现专家塌缩、动作越界或 loss 突跳的检查点直接淘汰。
 2. **离线验证**：只使用 60 条 validation episodes，分别计算六任务 action MAE/RMSE、50-step 轨迹 ADE/FDE、夹爪开闭正确率、速度/加速度/jerk、动作越界率、辅助教师 loss 和推理延迟。
-3. **候选排序**：综合分数采用“50% 六任务平均分 + 30% 最差任务分 + 10% 动作平滑性 + 10% 路由与推理稳定性”，避免平均成绩掩盖单项任务失效。
-4. **冻结测试**：离线 Top-3 确定后，测试集只运行一次，不允许根据 30 条 test episodes 继续调参。
+3. **候选排序**：综合惩罚权重为 MSE 25%、MAE 20%、最差任务MSE 15%、Velocity RMSE 15%、静止段速度RMS 10%、Jerk RMS 10%、Jerk P99.9 5%，所有指标越低越好。
+4. **冻结测试**：由60条完整 validation episodes 选出 `global_step_8884` 并冻结模型与后处理后，30条 test episodes 各运行一次完整序列；结果仅用于最终报告，不再调参。由于这30条在流程纠正前曾用于前500帧快速初筛，本次完整测试属于冻结后的全长度确认，但不能宣称为从未观察过的严格独立测试。
 5. **真机筛选**：Top-3 先做动作反归一化、关节限位和低速空载回放，再直接进入双 PIPER；先每模型每任务 3 次初筛，再对 Top-2 每模型每任务至少 5 次正式测试。
 
 真机最终记录六任务成功率、最差任务成功率、完成时间、人工急停、碰撞/越界、动作平滑性和推理延迟。最终模型按安全性和六任务稳定成功率选择，不按最低训练 loss 单独决定。
@@ -146,21 +146,21 @@ L_total = L_flow_action
 
 #### Model Selection Dashboard
 
-第一阶段中，七个候选模型均在固定的 30 条 held-out episodes 上完成相同的六任务开环评估（每任务 5 条）：`global_step_6663` 获得最低阶段性 MSE，`global_step_8884` 获得最低阶段性 MAE 与速度误差。该图保留为可审计的初筛记录，不代表最终模型选择。
+第一阶段曾以30条 held-out episodes 的前500帧对七个checkpoint进行快速初筛：`global_step_6663` 获得最低阶段性MSE，`global_step_8884` 获得最低阶段性MAE与速度误差。该图仅保留为可审计的历史初筛记录，不代表完整episode最终选择。
 
 ![GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
 
-随后对 1.50 / 1.75 / 2.00 epoch 三个候选使用完全相同的六任务完整 episode 配置复评，共覆盖 7,281 frames。综合准确度、最差任务、速度、静止抖动、jerk 与尾部尖峰后，`global_step_7774` 排名第一，确定为当前唯一离线部署候选。
+最终选模使用固定的60条验证集，对1.50 / 1.75 / 2.00 epoch三个候选运行六任务各10条完整episode，共64,811帧。三者使用完全一致的15-step重规划和冻结后处理；综合准确度、最差任务、速度、静止抖动、jerk与尾部尖峰后，`global_step_8884`排名第一。随后冻结该模型及全部后处理参数，在30条完整测试episode、32,581帧上一次性确认泛化表现。
 
 ![GOAI Full-Episode Checkpoint Comparison](assets/evaluation/full_episode_checkpoint_comparison.png)
 
 #### Six-Task Dual-Arm Action Prediction
 
-The following overview is retained as the stage-1 `global_step_6663` qualitative trace. The final checkpoint decision is based on the identical full-episode three-model comparison above; `global_step_7774` is now the selected offline deployment candidate. Each task shows representative left/right arm joints and both grippers.
+The overview below uses the lowest-MSE full test episode from each of the six tasks for the frozen `global_step_8884` pipeline. Every task shows four actions: its highest-variance left arm joint, left gripper, highest-variance right arm joint, and right gripper. Selection remains based on all 60 validation episodes—not on these favorable examples.
 
 ![GOAI 2026 Six-Task Dual-Arm Action Prediction](assets/evaluation/goai_six_task_action_overview.png)
 
-#### Held-out Loss Trend
+#### Historical 500-Frame Screening Trend
 
 ![GOAI Checkpoint Test Loss Curve](assets/evaluation/checkpoint_test_loss_curve.svg)
 
@@ -171,21 +171,21 @@ The following overview is retained as the stage-1 `global_step_6663` qualitative
 | 4,442 | 1.00 | 0.01687 | 0.06153 | 0.04188 | 候选 |
 | 5,553 | 1.25 | 0.01543 | 0.05835 | 0.03893 | 候选 |
 | **6,663** | **1.50** | **0.01535** | 0.05668 | 0.03781 | 初筛最低 MSE |
-| **7,774** | **1.75** | 0.01603 | 0.05637 | 0.03605 | **完整 episode 综合最优** |
+| **7,774** | **1.75** | 0.01603 | 0.05637 | 0.03605 | 初筛候选 |
 | **8,884** | **2.00** | 0.01588 | **0.05579** | **0.03528** | 初筛最低 MAE / 速度误差 |
 
-`global_step_7774` 完整六任务结果（当前最终离线筛选依据）：
+`global_step_8884` 的30条完整冻结测试结果：
 
 | Task | MSE ↓ | MAE ↓ | Velocity RMSE ↓ |
 |---|---:|---:|---:|
-| Fill the Pen Holder | 0.00352 | 0.03026 | 0.01642 |
-| Insert the Charger | 0.00313 | 0.02944 | 0.01516 |
-| Put Objects into the Basket | 0.00646 | 0.03694 | 0.01934 |
-| Stack and Cover the Blocks | 0.00371 | 0.02829 | 0.01631 |
-| Stack the Bowls | 0.00234 | 0.02479 | 0.01361 |
-| Stand Up the Bottles | 0.00198 | 0.02025 | 0.01318 |
+| Fill the Pen Holder | 0.00367 | 0.02918 | 0.01620 |
+| Insert the Charger | 0.00382 | 0.03058 | 0.01568 |
+| Put Objects into the Basket | 0.00524 | 0.03490 | 0.01820 |
+| Stack and Cover the Blocks | 0.00383 | 0.02818 | 0.01617 |
+| Stack the Bowls | 0.00372 | 0.02856 | 0.01549 |
+| Stand Up the Bottles | 0.00206 | 0.02237 | 0.01298 |
 
-> 三候选完整 episode 复评后，1.75 epoch 在宏平均 MSE 与尾部误差上最优，综合惩罚为 1.386%，优于 2.00 epoch 的 2.175% 与 1.50 epoch 的 6.065%。因此暂不继续增加 epoch，下一阶段优先进行低速、限幅、短执行窗口的双 PIPER 闭环真机验证。
+> 60条完整验证集上，2.00 epoch取得最低宏平均MSE（0.003849）、MAE（0.028888）、速度误差、静止抖动、Jerk与尾部尖峰，最终排序为 `8884 > 7774 > 6663`。冻结后的30条完整测试集MSE为0.003722，与验证集一致且未出现泛化退化，因此不再增加epoch或调整后处理；下一阶段进入双PIPER低速闭环真机验证。
 
 > 离线 Action MSE/MAE 用于候选筛选，不等同于真机任务成功率。最终结论仍以双 PIPER 闭环真机成功率、安全性和最差任务表现为准。
 
@@ -428,7 +428,7 @@ steps_per_epoch = floor(568610 / global_batch_size)
 
 ```bash
 cd /path/to/lingbot-vla-v2
-export MODEL_PATH=/path/to/global_step_7774/hf_ckpt
+export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
 export EXECUTION_HORIZON=15
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```
