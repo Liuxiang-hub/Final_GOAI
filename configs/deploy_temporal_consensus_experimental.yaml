@@ -1,0 +1,29 @@
+# Validated offline experiment; formal config remains unchanged until real-robot A/B.
+processor: temporal_ensemble_adaptive_ema
+prediction_horizon: 50
+execute_steps: 15
+
+temporal_ensemble:
+  history_chunks: 4
+  decay: 1.0
+  robust_arm_scale: null
+  robust_gripper_scale: null
+  consensus_arm_scale: 1.0
+  consensus_gripper_scale: 2.0
+
+adaptive_ema:
+  slow_alpha: 0.2
+  fast_alpha: 0.8
+  arm_transition: [0.003, 0.030]
+  gripper_transition: [0.010, 0.080]
+
+deadband:
+  enabled: false
+
+oscillation_filter:
+  enabled: true
+  window_steps: 7
+  minimum_sign_changes: 3
+  arm_small_delta: 0.030
+  gripper_small_delta: 0.100
+  oscillation_alpha: 0.05

@@ -19,7 +19,7 @@
 | 动作生成 | 36 层稀疏动作 MoE，32 experts，Top-4 |
 | 视觉输入 | 顶部、左腕、右腕三路相机 |
 | 动作窗口 | 未来 50 steps |
-| 真机重规划周期 | 执行 15 steps 后重新观测并推理，跨 chunk 融合 5 steps |
+| 真机重规划周期 | 模型预测 50 steps，执行 15 steps 后重新观测；4 个时间对齐 action chunks 集成并采用自适应 EMA |
 | 当前策略 | 冻结 VLM 与教师，训练动作 MoE、投影层和对齐头 |
 
 ### 🗂️ 项目目录结构
@@ -431,7 +431,9 @@ python -m deploy.lingbot_vla_v2_policy \
   --use_compile true
 ```
 
-机器人客户端需要使用 `scripts/deploy/action_chunk_blender.py` 中的 `ActionChunkBlender(execute_steps=15, blend_steps=5)` 处理服务端返回值。在 25 FPS 数据/控制频率下，每 15 steps 约 0.6 秒重新规划一次；模型的训练 `chunk_size=50` 保持不变。
+机器人客户端使用 `scripts/deploy/action_chunk_blender.py` 中的正式 `ActionChunkBlender` 处理服务端返回的完整 50-step action chunk。在 25 FPS 数据/控制频率下，每执行 15 steps（约 0.6 秒）重新观测和推理；处理器按绝对控制时刻融合最近 4 个 action chunks，并通过自适应 EMA 在动作稳定性和快速响应之间切换。正式基线参数见 `configs/deploy_temporal_adaptive.yaml`。
+
+离线验证后的真机 A/B 候选配置见 `configs/deploy_temporal_consensus_experimental.yaml`：在正式基线上加入一致性门控，并用 7-step 窗口识别至少 3 次小幅方向反转；机械臂/夹爪识别阈值分别为 `0.030/0.100`，触发时使用 `alpha=0.05`。六任务完整离线回放中，微振荡总幅度下降约 44.95%，静止段抖动下降约 2.39%，Jerk RMS 下降约 1.97%，MSE 增加约 0.26%。该配置仍需确认滤波所处坐标系并完成低速真机 A/B 后，才能替代正式基线。累积死区默认关闭，避免“保持—跳变”台阶。
 
 ## 8. 🌐 全部开源说明
 

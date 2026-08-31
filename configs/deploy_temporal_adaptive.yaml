@@ -1,0 +1,22 @@
+# Formal GOAI dual-PIPER action post-processing configuration.
+processor: temporal_ensemble_adaptive_ema
+prediction_horizon: 50
+execute_steps: 15
+
+temporal_ensemble:
+  history_chunks: 4
+  decay: 1.0
+
+adaptive_ema:
+  slow_alpha: 0.2
+  fast_alpha: 0.8
+  arm_transition: [0.003, 0.030]
+  gripper_transition: [0.010, 0.080]
+
+deadband:
+  enabled: false
+
+rollback:
+  class_name: LegacyActionChunkBlender
+  blend_steps: 5
+  ema_alpha: 0.8
