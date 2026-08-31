@@ -151,7 +151,7 @@ LegacyActionChunkBlender = ActionChunkBlender
 
 
 class ActionChunkBlender:
-    """Formal GOAI entry: timestamp-aligned temporal ensemble + adaptive EMA.
+    """Selected GOAI entry: temporal ensemble, consensus and adaptive smoothing.
 
     The public client API remains ``process(full_50_step_chunk)``; absolute
     chunk start indices are maintained internally. No deadband is applied.
@@ -168,13 +168,13 @@ class ActionChunkBlender:
         gripper_transition=(0.010, 0.080),
         robust_arm_scale: float | None = None,
         robust_gripper_scale: float | None = None,
-        consensus_arm_scale: float | None = None,
-        consensus_gripper_scale: float | None = None,
-        oscillation_window_steps: int | None = None,
+        consensus_arm_scale: float | None = 1.0,
+        consensus_gripper_scale: float | None = 2.0,
+        oscillation_window_steps: int | None = 7,
         oscillation_min_sign_changes: int = 3,
-        oscillation_arm_delta: float = 0.006,
-        oscillation_gripper_delta: float = 0.020,
-        oscillation_alpha: float = 0.10,
+        oscillation_arm_delta: float = 0.030,
+        oscillation_gripper_delta: float = 0.100,
+        oscillation_alpha: float = 0.05,
         enable_deadband: bool = False,
         **legacy_options,
     ) -> None:

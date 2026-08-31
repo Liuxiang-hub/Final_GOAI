@@ -66,9 +66,22 @@ cd lingbot-vla-v2
 python tasks/vla/train_lingbotvla.py --config configs/vla/real_robot/goai_piper_x_expert_only.yaml
 ```
 
-实际训练入口请以上游当前版本为准。先运行 20–50 steps 冒烟测试，再进入 1,000、5,000 和 10,000 steps 阶段验证。
+实际训练入口请以上游当前版本为准。先运行 20–50 steps 冒烟测试，再按配置完成 8,884 steps；检查点保存于 2,221 / 3,332 / 4,442 / 5,553 / 6,663 / 7,774 / 8,884。
 
-## 5. 🔐 安全与许可证
+## 5. 🤖 部署当前离线候选
+
+当前离线选择为 `global_step_7774`（1.75 epoch），选择依据与完整指标见 `configs/selected_model.yaml` 和 `assets/evaluation/full_episode_checkpoint_comparison.json`。服务端仍返回完整 50-step chunk；客户端执行 15 步后重观测，并按 `configs/deploy_temporal_adaptive.yaml` 使用四块时序集成、共识门控、自适应 EMA 和振荡抑制。
+
+```bash
+cd /path/to/lingbot-vla-v2
+export MODEL_PATH=/path/to/global_step_7774/hf_ckpt
+export EXECUTION_HORIZON=15
+bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
+```
+
+在连接机械臂前，必须依次完成输出维度、反归一化、关节顺序/单位/方向、夹爪范围、限位、速度/加速度、通信超时和急停验证。先空载低速运行，再逐任务闭环测试。离线最优不等于真机成功率最优。
+
+## 6. 🔐 安全与许可证
 
 - 不要将 SSH 密钥、密码、访问令牌或服务器地址提交到 Git。
 - 不要提交原始数据、模型权重、检查点、缓存和训练日志。

@@ -1,0 +1,20 @@
+# Offline-selected checkpoint. Real-robot closed-loop validation is still required.
+model:
+  checkpoint: global_step_7774
+  standard_epoch: 1.75
+  checkpoint_subdir: checkpoints/global_step_7774/hf_ckpt
+
+selection:
+  evaluated_frames: 7281
+  tasks: 6
+  identical_test_config: true
+  macro_mse: 0.00352381
+  macro_mae: 0.02832759
+  velocity_rmse: 0.01567080
+  stationary_velocity_rms: 0.01153172
+  jerk_rms: 0.03552803
+  jerk_p999: 0.29258465
+  composite_penalty_pct: 1.38578594
+  status: offline_selected_pending_real_robot_validation
+
+deployment_profile: configs/deploy_temporal_adaptive.yaml

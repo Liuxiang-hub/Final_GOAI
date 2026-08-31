@@ -1,4 +1,5 @@
-# Formal GOAI dual-PIPER action post-processing configuration.
+# Selected GOAI dual-PIPER offline deployment profile (2026-08-31).
+# Must still pass low-speed real-robot closed-loop validation before competition use.
 processor: temporal_ensemble_adaptive_ema
 prediction_horizon: 50
 execute_steps: 15
@@ -6,6 +7,10 @@ execute_steps: 15
 temporal_ensemble:
   history_chunks: 4
   decay: 1.0
+  robust_arm_scale: null
+  robust_gripper_scale: null
+  consensus_arm_scale: 1.0
+  consensus_gripper_scale: 2.0
 
 adaptive_ema:
   slow_alpha: 0.2
@@ -15,6 +20,14 @@ adaptive_ema:
 
 deadband:
   enabled: false
+
+oscillation_filter:
+  enabled: true
+  window_steps: 7
+  minimum_sign_changes: 3
+  arm_small_delta: 0.030
+  gripper_small_delta: 0.100
+  oscillation_alpha: 0.05
 
 rollback:
   class_name: LegacyActionChunkBlender

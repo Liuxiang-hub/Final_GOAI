@@ -1,0 +1,271 @@
+{
+  "identical_test_config": true,
+  "weights": {
+    "mse": 0.25,
+    "mae": 0.2,
+    "worst_task_mse": 0.15,
+    "velocity_rmse": 0.15,
+    "stationary_velocity_rms": 0.1,
+    "jerk_rms": 0.1,
+    "jerk_p999": 0.05
+  },
+  "ranking": [
+    "step7774",
+    "step8884",
+    "step6663"
+  ],
+  "models": {
+    "step6663": {
+      "epoch": 1.5,
+      "episodes": {
+        "15": {
+          "task": "Fill the Pen Holder",
+          "steps": 1150,
+          "mse": 0.0037914953635336483,
+          "mae": 0.031031834067429046,
+          "velocity_rmse": 0.017361167062271594,
+          "stationary_velocity_rms": 0.014009385369718075,
+          "jerk_rms": 0.038863085210323334,
+          "jerk_p999": 0.30104205739498197
+        },
+        "101": {
+          "task": "Insert the Charger",
+          "steps": 1707,
+          "mse": 0.0036137582324459413,
+          "mae": 0.031574699786300536,
+          "velocity_rmse": 0.016216794948382598,
+          "stationary_velocity_rms": 0.011967516504228115,
+          "jerk_rms": 0.03665831312537193,
+          "jerk_p999": 0.31526999309660736
+        },
+        "238": {
+          "task": "Put Objects into the Basket",
+          "steps": 1297,
+          "mse": 0.00642837781529273,
+          "mae": 0.03722806759235483,
+          "velocity_rmse": 0.019963361951040103,
+          "stationary_velocity_rms": 0.013509274460375309,
+          "jerk_rms": 0.04480435326695442,
+          "jerk_p999": 0.3775773417949831
+        },
+        "334": {
+          "task": "Stack and Cover the Blocks",
+          "steps": 1018,
+          "mse": 0.003943509796873065,
+          "mae": 0.028818925320800954,
+          "velocity_rmse": 0.017405214057962082,
+          "stationary_velocity_rms": 0.013648142106831074,
+          "jerk_rms": 0.04010893031954765,
+          "jerk_p999": 0.34739105767014417
+        },
+        "445": {
+          "task": "Stack the Bowls",
+          "steps": 989,
+          "mse": 0.0025561564627080346,
+          "mae": 0.025321528031315797,
+          "velocity_rmse": 0.014940508186710895,
+          "stationary_velocity_rms": 0.011695007793605328,
+          "jerk_rms": 0.03590444102883339,
+          "jerk_p999": 0.24897810828686587
+        },
+        "518": {
+          "task": "Stand Up the Bottles",
+          "steps": 1120,
+          "mse": 0.001671643800852245,
+          "mae": 0.02114228651005583,
+          "velocity_rmse": 0.013871693936595113,
+          "stationary_velocity_rms": 0.011319635435938835,
+          "jerk_rms": 0.0356503427028656,
+          "jerk_p999": 0.24572532808781417
+        }
+      },
+      "macro": {
+        "mse": 0.003667490245284278,
+        "mae": 0.029186223551376168,
+        "velocity_rmse": 0.016626456690493733,
+        "stationary_velocity_rms": 0.01269149361178279,
+        "jerk_rms": 0.038664910942316055,
+        "jerk_p999": 0.3059973143885661
+      },
+      "worst_task_mse": 0.00642837781529273,
+      "score_parts": {
+        "mse": 0.010193543972714714,
+        "mae": 0.008156277680911917,
+        "worst_task_mse": 0.0,
+        "velocity_rmse": 0.012078685036224267,
+        "stationary_velocity_rms": 0.015772664418894668,
+        "jerk_rms": 0.012157337473887964,
+        "jerk_p999": 0.0022920993343656603
+      },
+      "composite_penalty_pct": 6.065060791699919
+    },
+    "step7774": {
+      "epoch": 1.75,
+      "episodes": {
+        "15": {
+          "task": "Fill the Pen Holder",
+          "steps": 1150,
+          "mse": 0.003516448189395569,
+          "mae": 0.030262587437850538,
+          "velocity_rmse": 0.016418930176796815,
+          "stationary_velocity_rms": 0.012664747424423695,
+          "jerk_rms": 0.035687804222106934,
+          "jerk_p999": 0.27422007176280316
+        },
+        "101": {
+          "task": "Insert the Charger",
+          "steps": 1707,
+          "mse": 0.0031291427362688815,
+          "mae": 0.029437125917729196,
+          "velocity_rmse": 0.015159322129657869,
+          "stationary_velocity_rms": 0.01078440248966217,
+          "jerk_rms": 0.03339413180947304,
+          "jerk_p999": 0.2934276711940861
+        },
+        "238": {
+          "task": "Put Objects into the Basket",
+          "steps": 1297,
+          "mse": 0.006463155275068994,
+          "mae": 0.03694108927100438,
+          "velocity_rmse": 0.019339401603454737,
+          "stationary_velocity_rms": 0.012667571194469929,
+          "jerk_rms": 0.042422227561473846,
+          "jerk_p999": 0.3832516145706222
+        },
+        "334": {
+          "task": "Stack and Cover the Blocks",
+          "steps": 1018,
+          "mse": 0.003713987179164009,
+          "mae": 0.028288747033376423,
+          "velocity_rmse": 0.016311445565155052,
+          "stationary_velocity_rms": 0.012655449099838734,
+          "jerk_rms": 0.03681005537509918,
+          "jerk_p999": 0.3178715267777609
+        },
+        "445": {
+          "task": "Stack the Bowls",
+          "steps": 989,
+          "mse": 0.0023392157924487476,
+          "mae": 0.024789215843375782,
+          "velocity_rmse": 0.013611851783744307,
+          "stationary_velocity_rms": 0.010375848039984703,
+          "jerk_rms": 0.03224209323525429,
+          "jerk_p999": 0.22297621065378254
+        },
+        "518": {
+          "task": "Stand Up the Bottles",
+          "steps": 1120,
+          "mse": 0.0019809096547094987,
+          "mae": 0.02024675478596074,
+          "velocity_rmse": 0.013183856569670048,
+          "stationary_velocity_rms": 0.010042299516499043,
+          "jerk_rms": 0.03261188417673111,
+          "jerk_p999": 0.2637608208656334
+        }
+      },
+      "macro": {
+        "mse": 0.003523809804509283,
+        "mae": 0.028327586714882846,
+        "velocity_rmse": 0.015670801304746473,
+        "stationary_velocity_rms": 0.011531719627479712,
+        "jerk_rms": 0.035528032730023064,
+        "jerk_p999": 0.29258465263744804
+      },
+      "worst_task_mse": 0.006463155275068994,
+      "score_parts": {
+        "mse": 0.0,
+        "mae": 0.002032475899926256,
+        "worst_task_mse": 0.000811498501850616,
+        "velocity_rmse": 0.002762727273662502,
+        "stationary_velocity_rms": 0.005193127573694012,
+        "jerk_rms": 0.0030580301252814968,
+        "jerk_p999": 0.0
+      },
+      "composite_penalty_pct": 1.3857859374414883
+    },
+    "step8884": {
+      "epoch": 2.0,
+      "episodes": {
+        "15": {
+          "task": "Fill the Pen Holder",
+          "steps": 1150,
+          "mse": 0.0031653462198295043,
+          "mae": 0.028963426374406367,
+          "velocity_rmse": 0.015522090730427382,
+          "stationary_velocity_rms": 0.011602829210460186,
+          "jerk_rms": 0.03402507305145264,
+          "jerk_p999": 0.2757611779868611
+        },
+        "101": {
+          "task": "Insert the Charger",
+          "steps": 1707,
+          "mse": 0.003540059548347798,
+          "mae": 0.03008491153015766,
+          "velocity_rmse": 0.015334012872237818,
+          "stationary_velocity_rms": 0.010676312260329723,
+          "jerk_rms": 0.03340346738696098,
+          "jerk_p999": 0.3057530504465167
+        },
+        "238": {
+          "task": "Put Objects into the Basket",
+          "steps": 1297,
+          "mse": 0.00703474274240584,
+          "mae": 0.03693263202002026,
+          "velocity_rmse": 0.019499807053991295,
+          "stationary_velocity_rms": 0.012119433842599392,
+          "jerk_rms": 0.041660815477371216,
+          "jerk_p999": 0.4021794846654161
+        },
+        "334": {
+          "task": "Stack and Cover the Blocks",
+          "steps": 1018,
+          "mse": 0.003948008877254196,
+          "mae": 0.0280648737138291,
+          "velocity_rmse": 0.01645162791086596,
+          "stationary_velocity_rms": 0.01194811798632145,
+          "jerk_rms": 0.036358024924993515,
+          "jerk_p999": 0.3582732966840274
+        },
+        "445": {
+          "task": "Stack the Bowls",
+          "steps": 989,
+          "mse": 0.002558323527945523,
+          "mae": 0.025306388923684225,
+          "velocity_rmse": 0.013489964710991374,
+          "stationary_velocity_rms": 0.010107024572789669,
+          "jerk_rms": 0.03151765838265419,
+          "jerk_p999": 0.23489601063728385
+        },
+        "518": {
+          "task": "Stand Up the Bottles",
+          "steps": 1120,
+          "mse": 0.001433156846271778,
+          "mae": 0.01890341003418175,
+          "velocity_rmse": 0.012026857682953609,
+          "stationary_velocity_rms": 0.009320843033492565,
+          "jerk_rms": 0.029877839609980583,
+          "jerk_p999": 0.22276293136180822
+        }
+      },
+      "macro": {
+        "mse": 0.0036132729603424395,
+        "mae": 0.028042607099379894,
+        "velocity_rmse": 0.015387393493577907,
+        "stationary_velocity_rms": 0.010962426817665497,
+        "jerk_rms": 0.03447381313890219,
+        "jerk_p999": 0.2999376586303189
+      },
+      "worst_task_mse": 0.00703474274240584,
+      "score_parts": {
+        "mse": 0.006347047712299492,
+        "mae": 0.0,
+        "worst_task_mse": 0.014148941098419986,
+        "velocity_rmse": 0.0,
+        "stationary_velocity_rms": 0.0,
+        "jerk_rms": 0.0,
+        "jerk_p999": 0.0012565604392760555
+      },
+      "composite_penalty_pct": 2.175254924999553
+    }
+  }
+}

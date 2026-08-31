@@ -1,4 +1,5 @@
-# Validated offline experiment; formal config remains unchanged until real-robot A/B.
+# Traceability copy of the offline-validated profile. The formal profile now lives
+# in deploy_temporal_adaptive.yaml; retain this file for controlled real-robot A/B.
 processor: temporal_ensemble_adaptive_ema
 prediction_horizon: 50
 execute_steps: 15

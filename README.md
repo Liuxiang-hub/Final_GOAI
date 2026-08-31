@@ -15,6 +15,7 @@
 | 演示数据 | 600 episodes，666,002 frames，25 FPS |
 | 数据划分 | Train / Validation / Test = 510 / 60 / 30 |
 | 主模型 | LingBot-VLA 2.0 6B |
+| 当前离线部署候选 | `global_step_7774`（1.75 standard epochs，待真机闭环确认） |
 | 视觉语言骨干 | Qwen3-VL-4B-Instruct |
 | 动作生成 | 36 层稀疏动作 MoE，32 experts，Top-4 |
 | 视觉输入 | 顶部、左腕、右腕三路相机 |
@@ -30,12 +31,15 @@ Final_GOAI/
 │   ├── goai-dual-arm-hero.png              # README 项目横幅
 │   ├── norm_stats/
 │   │   └── goai_piper_x.json               # 仅由 510 个训练 episodes 计算的归一化统计
+│   ├── evaluation/                          # 训练曲线、完整 episode 评估图与原始指标 JSON
 │   ├── task_demos/                          # 六项真机任务的 20 秒动画展示
 │   └── training_data/
 │       └── goai_piper_x_six_tasks.example.txt
 ├── configs/
 │   ├── goai_piper_x.yaml                    # 双 PIPER 关节、夹爪与三相机映射
-│   └── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
+│   ├── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
+│   ├── deploy_temporal_adaptive.yaml        # 当前离线部署后处理参数
+│   └── selected_model.yaml                  # step 7774 选择结论与完整指标
 ├── patches/
 │   └── lingbot-vla-v2/
 │       └── episode_split_loader.patch       # 训练加载器严格限制到指定 episodes
@@ -46,7 +50,7 @@ Final_GOAI/
 │   │   └── validate_lerobot_v30_joint.py
 │   └── deploy/
 │       ├── start_lingbot_vla_v2_server.sh      # 15-step 闭环重规划推理入口
-│       └── action_chunk_blender.py              # 5-step 余弦跨 chunk 融合
+│       └── action_chunk_blender.py              # 时序集成、共识门控、自适应 EMA 与振荡抑制
 ├── splits/
 │   ├── episode_splits_seed2026.json         # 完整、可审计的固定划分清单
 │   ├── train_episodes.txt                    # 510 episodes
@@ -136,19 +140,23 @@ L_total = L_flow_action
 
 #### Training Dynamics
 
-下图展示本次 2-epoch 正式训练。蓝线为核心 `VLA_Loss`，橙线为包含辅助监督项的总 Loss；横轴同时给出 standard epoch 与 optimizer step（4,442 steps = 1 epoch），曲线为 50-step 滑动平均。本地保存的连续逐 step 日志覆盖 step 1–8,246，绿色终点为训练结束时独立核验的 step 8,884 指标（`VLA_Loss=0.0504`），中间缺失区间不进行插值伪造。
+下图展示本次 2-epoch 正式训练。蓝线为核心 `VLA_Loss`，橙线为包含辅助监督项的总 Loss；横轴同时给出 standard epoch 与 optimizer step（4,442 steps = 1 epoch），曲线为 100-step 滑动平均，并按每 0.5 epoch 着色。本地保存的连续逐 step 日志覆盖 step 1–8,246，绿色终点为训练结束时独立核验的 step 8,884 指标（`VLA_Loss=0.0504`），中间缺失区间不进行插值伪造。
 
 ![LingBot-VLA 2.0 Training Loss Curves](assets/evaluation/training_loss_curves.png)
 
 #### Model Selection Dashboard
 
-七个候选模型均在 30 条 held-out episodes 上完成相同的六任务开环评估（每任务 5 条）。`global_step_6663` 在 1.50 epoch 获得最低整体 MSE，并作为当前主部署候选；`global_step_8884` 获得最低 MAE 与最低速度误差，保留为真机平滑性 A/B 备用模型。
+第一阶段中，七个候选模型均在固定的 30 条 held-out episodes 上完成相同的六任务开环评估（每任务 5 条）：`global_step_6663` 获得最低阶段性 MSE，`global_step_8884` 获得最低阶段性 MAE 与速度误差。该图保留为可审计的初筛记录，不代表最终模型选择。
 
 ![GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
 
+随后对 1.50 / 1.75 / 2.00 epoch 三个候选使用完全相同的六任务完整 episode 配置复评，共覆盖 7,281 frames。综合准确度、最差任务、速度、静止抖动、jerk 与尾部尖峰后，`global_step_7774` 排名第一，确定为当前唯一离线部署候选。
+
+![GOAI Full-Episode Checkpoint Comparison](assets/evaluation/full_episode_checkpoint_comparison.png)
+
 #### Six-Task Dual-Arm Action Prediction
 
-The following full-episode overview compares ground-truth actions with the current `global_step_6663` deployment candidate after 15-step replanning, timestamp-aligned temporal ensembling, consensus gating, adaptive EMA, and oscillation-aware smoothing. Each task shows representative left/right arm joints and both grippers; all metrics are computed on the complete episode rather than a 500-frame excerpt.
+The following overview is retained as the stage-1 `global_step_6663` qualitative trace. The final checkpoint decision is based on the identical full-episode three-model comparison above; `global_step_7774` is now the selected offline deployment candidate. Each task shows representative left/right arm joints and both grippers.
 
 ![GOAI 2026 Six-Task Dual-Arm Action Prediction](assets/evaluation/goai_six_task_action_overview.png)
 
@@ -162,22 +170,22 @@ The following full-episode overview compares ground-truth actions with the curre
 | 3,332 | 0.75 | 0.01828 | 0.06517 | 0.04557 | 候选 |
 | 4,442 | 1.00 | 0.01687 | 0.06153 | 0.04188 | 候选 |
 | 5,553 | 1.25 | 0.01543 | 0.05835 | 0.03893 | 候选 |
-| **6,663** | **1.50** | **0.01535** | 0.05668 | 0.03781 | **主模型：最低 MSE** |
-| 7,774 | 1.75 | 0.01603 | 0.05637 | 0.03605 | 候选 |
-| **8,884** | **2.00** | 0.01588 | **0.05579** | **0.03528** | **平滑备选** |
+| **6,663** | **1.50** | **0.01535** | 0.05668 | 0.03781 | 初筛最低 MSE |
+| **7,774** | **1.75** | 0.01603 | 0.05637 | 0.03605 | **完整 episode 综合最优** |
+| **8,884** | **2.00** | 0.01588 | **0.05579** | **0.03528** | 初筛最低 MAE / 速度误差 |
 
-`global_step_6663` 六任务结果：
+`global_step_7774` 完整六任务结果（当前最终离线筛选依据）：
 
 | Task | MSE ↓ | MAE ↓ | Velocity RMSE ↓ |
 |---|---:|---:|---:|
-| Fill Pen Holder | 0.01489 | 0.05694 | 0.03855 |
-| Insert Charger | **0.01174** | 0.05431 | **0.03522** |
-| Put Objects Into Basket | 0.01403 | 0.05990 | 0.03706 |
-| Stack and Cover Blocks | 0.01444 | 0.05804 | 0.03784 |
-| Stack Bowls | 0.02167 | 0.06147 | 0.03834 |
-| Stand Up Bottles | 0.01534 | **0.04943** | 0.03983 |
+| Fill the Pen Holder | 0.00352 | 0.03026 | 0.01642 |
+| Insert the Charger | 0.00313 | 0.02944 | 0.01516 |
+| Put Objects into the Basket | 0.00646 | 0.03694 | 0.01934 |
+| Stack and Cover the Blocks | 0.00371 | 0.02829 | 0.01631 |
+| Stack the Bowls | 0.00234 | 0.02479 | 0.01361 |
+| Stand Up the Bottles | 0.00198 | 0.02025 | 0.01318 |
 
-> 当前训练在 1.50 epoch 后进入平台期，并出现任务间取舍，因此暂不继续盲目增加 epoch。下一阶段优先进行低速、限幅、短执行窗口的双 PIPER 闭环真机验证。
+> 三候选完整 episode 复评后，1.75 epoch 在宏平均 MSE 与尾部误差上最优，综合惩罚为 1.386%，优于 2.00 epoch 的 2.175% 与 1.50 epoch 的 6.065%。因此暂不继续增加 epoch，下一阶段优先进行低速、限幅、短执行窗口的双 PIPER 闭环真机验证。
 
 > 离线 Action MSE/MAE 用于候选筛选，不等同于真机任务成功率。最终结论仍以双 PIPER 闭环真机成功率、安全性和最差任务表现为准。
 
@@ -194,7 +202,7 @@ LingBot-VLA 2.0 不是简单的“看图后回归关节值”，而是把语言�
 | 预测式世界动态 | 预测未来深度和视频表征作为辅助目标 | 强化双臂配合、抓取状态判断和长时序操作 |
 | Flow Matching | 从噪声轨迹逐步生成连续动作分布 | 能表达多种合理操作轨迹，不局限于单一均值动作 |
 | 50-step Action Chunk | 单次输出连续动作窗口 | 提高短时动作连贯性，降低闭环推理频率 |
-| 15-step Closed-loop Replan | 每次执行 15 步后重新采集图像与状态，并跨 chunk 融合 5 步 | 减少长开环漂移、时序滞后和动作块边界跳变 |
+| 15-step Closed-loop Replan | 返回 50 步、执行 15 步后重观测；按绝对时刻集成最近 4 个 chunks，并采用共识门控、自适应 EMA 与振荡抑制 | 减少长开环漂移、时序滞后、边界跳变和静止段抖动 |
 | 多视角融合 | 联合顶部与左右腕部相机 | 同时掌握全局布局和双手局部接触细节 |
 
 ### 3.1 🧩 统一 55 维动作/状态表示
@@ -414,15 +422,14 @@ steps_per_epoch = floor(568610 / global_batch_size)
 - 设置关节限位、速度/加速度限制、急停和通信超时保护；
 - 先低速、短动作窗口和人工急停监护，再提高执行速度。
 
-### 7.1 15-step 闭环重规划与 5-step 融合
+### 7.1 15-step 闭环重规划与四块时序集成
 
-模型按训练配置预测完整的 50-step action chunk，服务端也每次返回完整 50 步。客户端只执行前 15 步，并保留旧 chunk 的第 16–20 步；随后重新采集顶部、左腕、右腕图像与双臂状态，请求新的完整 50-step chunk，将旧 chunk 保留的 5 步与新 chunk 前 5 步做余弦融合，再继续执行。这样每次实际执行仍为 15 步。
+模型按训练配置预测完整的 50-step action chunk，服务端每次返回完整 50 步。客户端只执行 15 步，随后重新采集顶部、左腕、右腕图像与双臂状态并再次推理。客户端按绝对控制时刻对齐最近 4 个 action chunks，使用共识门控抑制相互矛盾的预测，再以自适应 EMA 平衡快速响应与稳定保持，并用 7-step 振荡检测器压制连续小幅反向摆动。
 
 ```bash
 cd /path/to/lingbot-vla-v2
-export MODEL_PATH=/path/to/global_step_6663/hf_ckpt
+export MODEL_PATH=/path/to/global_step_7774/hf_ckpt
 export EXECUTION_HORIZON=15
-export CHUNK_BLEND_STEPS=5
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
 ```
 
@@ -437,9 +444,9 @@ python -m deploy.lingbot_vla_v2_policy \
   --use_compile true
 ```
 
-机器人客户端使用 `scripts/deploy/action_chunk_blender.py` 中的正式 `ActionChunkBlender` 处理服务端返回的完整 50-step action chunk。在 25 FPS 数据/控制频率下，每执行 15 steps（约 0.6 秒）重新观测和推理；处理器按绝对控制时刻融合最近 4 个 action chunks，并通过自适应 EMA 在动作稳定性和快速响应之间切换。正式基线参数见 `configs/deploy_temporal_adaptive.yaml`。
+机器人客户端使用 `scripts/deploy/action_chunk_blender.py` 中的 `ActionChunkBlender` 处理服务端返回的完整 50-step action chunk。在 25 FPS 数据/控制频率下，每执行 15 steps（约 0.6 秒）重新观测和推理；正式离线候选参数见 `configs/deploy_temporal_adaptive.yaml`，模型选择元数据见 `configs/selected_model.yaml`。
 
-离线验证后的真机 A/B 候选配置见 `configs/deploy_temporal_consensus_experimental.yaml`：在正式基线上加入一致性门控，并用 7-step 窗口识别至少 3 次小幅方向反转；机械臂/夹爪识别阈值分别为 `0.030/0.100`，触发时使用 `alpha=0.05`。六任务完整离线回放中，微振荡总幅度下降约 44.95%，静止段抖动下降约 2.39%，Jerk RMS 下降约 1.97%，MSE 增加约 0.26%。该配置仍需确认滤波所处坐标系并完成低速真机 A/B 后，才能替代正式基线。累积死区默认关闭，避免“保持—跳变”台阶。
+当前离线候选配置使用一致性门控，并用 7-step 窗口识别至少 3 次小幅方向反转；机械臂/夹爪识别阈值分别为 `0.030/0.100`，触发时使用 `alpha=0.05`。六任务完整离线回放中，微振荡总幅度下降约 44.95%，静止段抖动下降约 2.39%，Jerk RMS 下降约 1.97%，MSE 增加约 0.26%。`configs/deploy_temporal_consensus_experimental.yaml` 仅作为同参数的 A/B 追溯副本。该配置仍需确认滤波所处坐标系并完成低速真机验证；累积死区默认关闭，避免“保持—跳变”台阶。
 
 ## 8. 🌐 全部开源说明
 
