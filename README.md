@@ -146,6 +146,12 @@ L_total = L_flow_action
 
 ![GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
 
+#### Six-Task Dual-Arm Action Prediction
+
+The following full-episode overview compares ground-truth actions with the current `global_step_6663` deployment candidate after 15-step replanning, timestamp-aligned temporal ensembling, consensus gating, adaptive EMA, and oscillation-aware smoothing. Each task shows representative left/right arm joints and both grippers; all metrics are computed on the complete episode rather than a 500-frame excerpt.
+
+![GOAI 2026 Six-Task Dual-Arm Action Prediction](assets/evaluation/goai_six_task_action_overview.png)
+
 #### Held-out Loss Trend
 
 ![GOAI Checkpoint Test Loss Curve](assets/evaluation/checkpoint_test_loss_curve.svg)
