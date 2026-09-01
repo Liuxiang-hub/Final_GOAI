@@ -122,7 +122,7 @@ print(model_dir)
 - GitHub: https://github.com/Liuxiang-hub/Final_GOAI
 - LingBot-VLA 2.0: https://github.com/Robbyant/lingbot-vla-v2
 
-## 备选模型（次要位置）
+## 备选模型
 
 仓库根目录的 `global_step_8884` 始终是默认主模型。以下权重仅用于复核、回退和对照，不会被部署配置自动选中：
 
