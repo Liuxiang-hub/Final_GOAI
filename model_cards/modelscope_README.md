@@ -122,6 +122,17 @@ print(model_dir)
 - GitHub: https://github.com/Liuxiang-hub/Final_GOAI
 - LingBot-VLA 2.0: https://github.com/Robbyant/lingbot-vla-v2
 
+## 备选模型（次要位置）
+
+仓库根目录的 `global_step_8884` 始终是默认主模型。以下权重仅用于复核、回退和对照，不会被部署配置自动选中：
+
+| 目录 | 训练进度 | 定位 | Validation MSE | Validation MAE |
+|---|---:|---|---:|---:|
+| `alternatives/global_step_7774` | 1.75 epochs | 首选备选；完整验证集综合排名第二 | 0.003921 | 0.029408 |
+| `alternatives/global_step_6663` | 1.50 epochs | 次选备选；早期 500 帧筛选中 MSE 最低 | 0.003972 | 0.030206 |
+
+最终验证集综合排序为 `8884 > 7774 > 6663`。两个备选目录仅发布推理所需的 `hf_ckpt` 文件，不含优化器、学习率调度器等续训状态，因此可用于推理比较，但不能精确恢复当时的训练过程。
+
 ## 许可证与数据合规
 
 使用者需分别遵守 GOAI 数据集、LingBot-VLA、Qwen3-VL、MoGe、DINO 和 PIPER SDK 的许可证。模型发布不代表重新授权原始比赛数据；未经许可不要公开上传原始真机数据。
