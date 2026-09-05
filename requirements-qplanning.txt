@@ -1,0 +1,2 @@
+# Preparation utilities only. Install official qplanning-code separately in an isolated env.
+numpy==1.26.4

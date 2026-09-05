@@ -1,0 +1,57 @@
+{
+  "stage": "offline_prepare",
+  "enabled": false,
+  "bc_policy": {
+    "type": "lingbot_vla_v2",
+    "checkpoint": "global_step_8884",
+    "checkpoint_subdir": "checkpoints/global_step_8884/hf_ckpt",
+    "frozen": true,
+    "prediction_horizon": 50,
+    "action_dim": 14,
+    "action_layout": [
+      "left_arm_joint_delta_0:6",
+      "left_gripper_absolute",
+      "right_arm_joint_delta_0:6",
+      "right_gripper_absolute"
+    ],
+    "norm_stats": "assets/norm_stats/goai_piper_x.json"
+  },
+  "planner": {
+    "type": "q_weighted",
+    "n_samples": 4,
+    "n_elites": 4,
+    "temperature": 1.0,
+    "denoise_steps": null,
+    "fallback_on_error": "baseline_first_sample"
+  },
+  "q_function": {
+    "implementation": "pending_lingbot_adapter",
+    "horizon": 50,
+    "action_dim": 14,
+    "frozen_bc": true,
+    "train_split": "splits/train_episodes.txt",
+    "validation_split": "splits/val_episodes.txt",
+    "replay_manifest": "outputs/qplanning/replay/episodes.jsonl",
+    "terminal_reward": {"success": 1.0, "failure": 0.0},
+    "status": "blocked_until_adapter_and_labels"
+  },
+  "deployment": {
+    "execute_steps": 15,
+    "postprocessor": "configs/deploy_temporal_adaptive.yaml",
+    "order": [
+      "sample_lingbot_candidates",
+      "normalize_and_validate",
+      "q_score_and_weight",
+      "temporal_ensemble_and_adaptive_ema",
+      "robot_safety_limits",
+      "execute_first_15_steps"
+    ]
+  },
+  "safety_gate": {
+    "deploy_to_robot": false,
+    "require_offline_candidate_replay": true,
+    "require_latency_p95_below_ms": 500,
+    "require_baseline_fallback_test": true,
+    "require_human_estop": true
+  }
+}

@@ -8,12 +8,12 @@ import queue
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import cv2
 import h5py
 import numpy as np
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets import video_utils
 from lerobot.datasets.video_utils import StreamingVideoEncoder
+from XPolicyLab.utils.process_data import decode_image_bit
 
 
 TASK_PROMPTS = {
@@ -85,11 +85,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def decode_jpeg(encoded: np.ndarray, source: Path, camera: str, frame: int) -> np.ndarray:
-    payload = encoded.tobytes().rstrip(b"\x00")
-    image = cv2.imdecode(np.frombuffer(payload, dtype=np.uint8), cv2.IMREAD_COLOR)
-    if image is None:
-        raise ValueError(f"Cannot decode {source}: {camera} frame {frame}")
+def decode_rgb(encoded: np.ndarray, source: Path, camera: str, frame: int) -> np.ndarray:
+    """Decode through the only GOAI/XPolicyLab-supported RGB path."""
+    try:
+        image = np.asarray(decode_image_bit(encoded))
+    except Exception as exc:
+        raise ValueError(f"Cannot decode {source}: {camera} frame {frame}") from exc
+    if image.ndim != 3 or image.shape[-1] != 3 or image.dtype != np.uint8:
+        raise ValueError(
+            f"Invalid decoded RGB frame in {source}: {camera} frame {frame}: "
+            f"shape={image.shape}, dtype={image.dtype}"
+        )
     return np.ascontiguousarray(image)
 
 
@@ -157,7 +163,7 @@ def add_episode(
                 for output_key, encoded_frames in cameras.items():
                     encoded = np.asarray(encoded_frames[index])
                     futures[(index, output_key)] = executor.submit(
-                        decode_jpeg, encoded, source, output_key, index
+                        decode_rgb, encoded, source, output_key, index
                     )
             for index in range(batch_start, batch_end):
                 frame = {

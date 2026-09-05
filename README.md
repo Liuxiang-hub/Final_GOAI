@@ -22,6 +22,7 @@
 | 动作窗口 | 未来 50 steps |
 | 真机重规划周期 | 模型预测 50 steps，执行 15 steps 后重新观测；4 个时间对齐 action chunks 集成并采用自适应 EMA |
 | 当前策略 | 冻结 VLM 与教师，训练动作 MoE、投影层和对齐头 |
+| 升级路线 | 冻结 step8884，增加 Q-Planning 候选评分；当前仅完成离线准备，默认关闭 |
 
 ### 🗂️ 项目目录结构
 
@@ -40,6 +41,8 @@ Final_GOAI/
 │   ├── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
 │   ├── deploy_temporal_adaptive.yaml        # 当前离线部署后处理参数
 │   ├── deploy_temporal_consensus_experimental.yaml # 当前参数的可追溯实验副本
+│   ├── qplanning/
+│   │   └── offline_prepare.yaml             # Q升级契约、回退与安全门（默认关闭）
 │   └── selected_model.yaml                  # step 8884 最终离线选择结论与指标
 ├── patches/
 │   └── lingbot-vla-v2/
@@ -49,11 +52,13 @@ Final_GOAI/
 │   │   ├── convert_real_hdf5_to_lerobot_v30_joint.py
 │   │   ├── create_lerobot_episode_splits.py
 │   │   └── validate_lerobot_v30_joint.py
-│   └── deploy/
-│       ├── start_lingbot_vla_v2_server.sh      # 启动模型服务端，始终返回完整 50-step chunk
-│       ├── action_chunk_blender.py              # 客户端 15-step 重规划与当前自适应后处理
-│       └── temporal_ensemble_filter.py           # 时序集成基础实现
-├── scripts/render_historical_dashboard.py       # 重绘历史 500-frame 初筛仪表盘
+│   ├── deploy/
+│   │   ├── start_lingbot_vla_v2_server.sh      # 启动模型服务端，始终返回完整 50-step chunk
+│   │   ├── action_chunk_blender.py              # 客户端 15-step 重规划与当前自适应后处理
+│   │   └── temporal_ensemble_filter.py           # 时序集成基础实现
+│   ├── qplanning/                            # Q加权、LingBot适配契约、回放清单与预检
+│   └── render_historical_dashboard.py       # 重绘历史 500-frame 初筛仪表盘
+├── tests/test_qplanning_preparation.py       # Q升级CPU契约测试
 ├── splits/
 │   ├── episode_splits_seed2026.json         # 完整、可审计的固定划分清单
 │   ├── train_episodes.txt                    # 510 episodes
@@ -62,6 +67,8 @@ Final_GOAI/
 │   └── SHA256SUMS                            # 划分文件完整性校验
 ├── .gitignore                                # 排除数据、权重、检查点、日志与缓存
 ├── README.md                                 # 项目总览
+├── Q_PLANNING_UPGRADE.md                     # Q-Planning升级实施与安全门
+├── requirements-qplanning.txt                # Q准备工具的最小依赖
 ├── REPRODUCE.md                              # 从数据转换到训练的完整复现指南
 └── TRAINING_AND_MODEL_SELECTION_PLAN.md      # 已执行训练、选模与待完成真机计划
 ```
@@ -69,6 +76,20 @@ Final_GOAI/
 仓库只保存团队原创代码、配置、固定划分和复现文档；原始数据、基础模型权重与训练检查点通过官方来源下载，不直接提交到 Git。
 
 ## 2. 🔧 技术路线
+
+本项目采用两级路线，并保持可独立回退：
+
+- **当前初始方案（默认）**：冻结 `global_step_8884`，执行50步动作预测、15步闭环重规划、四块时序集成、自适应 EMA、振荡抑制与机器人安全限制；
+- **Q-Planning 升级方案（默认关闭）**：冻结同一个 `global_step_8884`，让 LingBot 生成多个候选动作块，由离线/在线 Q-function 评分并加权，再进入完全相同的后处理和安全链路。该路线用于吸收真机成功与失败 rollout，不替换当前基线。
+
+升级方案的代码契约、配置、安全门、真机记录格式和上线标准见 [Q_PLANNING_UPGRADE.md](Q_PLANNING_UPGRADE.md)。在完成 baseline 真机测试、候选延迟测试和低速 A/B 前，Q-Planning 不作为正式部署入口。
+
+2026-09-05已在正式服务器完成RGB链路审计：原始HDF5三相机9个抽样帧与官方 `decode_image_bit` 逐像素一致，LeRobot视频颜色顺序正确。当前step8884无需因RGB/BGR问题重训；后续数据转换已强制改用XPolicyLab官方解码入口。
+
+```text
+Baseline:  observation -> LingBot step8884 -> temporal/adaptive filter -> safety -> PIPER
+Upgrade:   observation -> LingBot N candidates -> Q weighting -> same filter -> safety -> PIPER
+```
 
 ```text
 GOAI 600 条 HDF5 真实演示
