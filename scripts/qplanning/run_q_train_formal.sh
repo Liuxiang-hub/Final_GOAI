@@ -1,42 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# GOAI Q-function compatibility/performance smoke test.
-# It intentionally trains only on the frozen 510-episode training split.
+# Formal offline Q-function initialization for GOAI.
+# The frozen 60-episode validation and 30-episode test splits are never passed
+# to the training dataset. They are evaluated independently after training.
 
 Q_ENV="${Q_ENV:-/root/autodl-tmp/conda_envs/qplanning}"
 DATASET_ROOT="${DATASET_ROOT:-/root/autodl-tmp/25w/data/lerobot_v30_joint}"
-SPLIT_FILE="${SPLIT_FILE:-${DATASET_ROOT}/splits/train_episodes.txt}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/autodl-tmp/qplanning_artifacts/goai_q_smoke}"
+TRAIN_SPLIT="${TRAIN_SPLIT:-${DATASET_ROOT}/splits/train_episodes.txt}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/autodl-tmp/qplanning_artifacts/goai_q_formal_20260905}"
 HF_HOME="${HF_HOME:-/root/autodl-tmp/qplanning_hf}"
-STEPS="${STEPS:-30}"
-BATCH_SIZE="${BATCH_SIZE:-8}"
-NUM_WORKERS="${NUM_WORKERS:-4}"
-USE_BF16="${USE_BF16:-1}"
+STEPS="${STEPS:-40000}"
+BATCH_SIZE="${BATCH_SIZE:-48}"
+NUM_WORKERS="${NUM_WORKERS:-8}"
+SAVE_FREQ="${SAVE_FREQ:-5000}"
+LOG_FREQ="${LOG_FREQ:-25}"
 
 export HF_HOME
-export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
-export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
+# Both pretrained encoders are pre-cached. Avoid fragile network HEAD requests
+# interrupting or delaying a long formal run.
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 unset OMP_NUM_THREADS
 
-mapfile -t EPISODES < <(sed '/^[[:space:]]*$/d' "${SPLIT_FILE}")
+mapfile -t EPISODES < <(sed '/^[[:space:]]*$/d' "${TRAIN_SPLIT}")
 if [[ "${#EPISODES[@]}" -ne 510 ]]; then
-  echo "Expected 510 training episodes, found ${#EPISODES[@]} in ${SPLIT_FILE}" >&2
+  echo "Expected 510 training episodes, found ${#EPISODES[@]} in ${TRAIN_SPLIT}" >&2
   exit 2
+fi
+
+if [[ -e "${OUTPUT_DIR}" ]]; then
+  echo "Refusing to overwrite existing formal output: ${OUTPUT_DIR}" >&2
+  exit 3
 fi
 
 EPISODE_LIST="$(IFS=,; echo "${EPISODES[*]}")"
 
-if [[ "${USE_BF16}" == "1" ]]; then
-  LAUNCHER=("${Q_ENV}/bin/accelerate" launch --num_processes=1 --mixed_precision=bf16 -m lerobot.scripts.lerobot_train)
-else
-  LAUNCHER=("${Q_ENV}/bin/python" -m lerobot.scripts.lerobot_train)
-fi
-
-exec "${LAUNCHER[@]}" \
+exec "${Q_ENV}/bin/accelerate" launch \
+  --num_processes=1 \
+  --mixed_precision=bf16 \
+  -m lerobot.scripts.lerobot_train \
   --policy.type=q_function \
   --policy.push_to_hub=false \
-  --job_name=goai_q_smoke \
+  --job_name=goai_q_formal \
   --output_dir="${OUTPUT_DIR}" \
   --policy.dino_model_name=facebook/dinov2-large \
   --policy.text_encoder_model=google/t5-v1_1-base \
@@ -60,7 +66,7 @@ exec "${LAUNCHER[@]}" \
   --policy.optimizer_weight_decay=1e-4 \
   --policy.lr_scheduler=cosine_decay_with_warmup \
   --policy.lr_warmup_steps=2000 \
-  --policy.lr_decay_steps=40000 \
+  --policy.lr_decay_steps="${STEPS}" \
   --policy.lr_decay_min=1e-6 \
   --policy.device=cuda \
   --dataset.repo_id=local/goai_piper_x \
@@ -69,8 +75,9 @@ exec "${LAUNCHER[@]}" \
   --dataset.use_imagenet_stats=false \
   --batch_size="${BATCH_SIZE}" \
   --steps="${STEPS}" \
-  --save_checkpoint=false \
-  --log_freq=1 \
+  --save_checkpoint=true \
+  --save_freq="${SAVE_FREQ}" \
+  --log_freq="${LOG_FREQ}" \
   --num_workers="${NUM_WORKERS}" \
   --seed=42 \
   --cudnn_deterministic=false \
