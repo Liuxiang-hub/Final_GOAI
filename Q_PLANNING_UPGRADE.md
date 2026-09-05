@@ -112,3 +112,23 @@ LingBot-VLA 2.0 环境。两者通过 adapter/API 边界连接。
 为满足官方接口约束并兼容其他bit布局，转换脚本已经改为直接调用
 `decode_image_bit`；后续转换环境必须能导入官方XPolicyLab包，禁止恢复手写PIL或
 `cv2.imdecode`路径，也禁止在解码后额外执行BGR/RGB交换。
+
+## Q 网络训练验证（2026-09-05）
+
+已在独立 `qplanning` 环境中使用官方 `qplanning-code` 与其 `qplanning-release-v1` LeRobot fork 完成真实 CUDA 烟雾测试，未修改已验证的 LingBot-VLA 2.0 环境：
+
+- 数据入口强制读取 `splits/train_episodes.txt`，实际加载 **510 episodes / 568,610 frames**；验证集 60 条与测试集 30 条未参与 Q 训练；
+- 输入为三路 RGB、14 维双臂动作，Q horizon 与 LingBot 动作块对齐为 **H=50**；
+- Q 网络共 1,328,645,450 参数，其中 609,508,453 个可训练参数；
+- 两步测试已完整通过数据读取、前向、反向、优化器更新和 checkpoint 保存；
+- RTX 6000D 单卡 BF16、batch 48 的 20-step 性能测试峰值显存约 **66.1 GB**，稳定约 **1.10 s/step（43.5 samples/s）**，GPU 峰值利用率 100%；
+- 官方 40,000 steps 配置按实测速率约需 12.3 小时纯训练，计入验证与保存建议预留 **13–15 小时**。
+
+该结果只证明训练链路和资源配置可用，不证明 Q 已具备上线价值。短测试会自动压缩学习率日程，因此其 loss 不能用于模型选择；正式训练仍需使用完整 2,000-step warmup，并在真机失败轨迹到位后完成 Q 排序、延迟和安全 A/B 验证。
+
+可复现实测入口：
+
+```bash
+STEPS=30 BATCH_SIZE=48 USE_BF16=1 \
+  bash scripts/qplanning/run_q_train_smoke.sh
+```

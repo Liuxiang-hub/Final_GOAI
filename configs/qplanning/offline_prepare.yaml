@@ -25,7 +25,7 @@
     "fallback_on_error": "baseline_first_sample"
   },
   "q_function": {
-    "implementation": "pending_lingbot_adapter",
+    "implementation": "official_qplanning_training_verified_lingbot_adapter_pending",
     "horizon": 50,
     "action_dim": 14,
     "frozen_bc": true,
@@ -33,7 +33,7 @@
     "validation_split": "splits/val_episodes.txt",
     "replay_manifest": "outputs/qplanning/replay/episodes.jsonl",
     "terminal_reward": {"success": 1.0, "failure": 0.0},
-    "status": "blocked_until_adapter_and_labels"
+    "status": "offline_q_training_verified_adapter_and_robot_failures_pending"
   },
   "deployment": {
     "execute_steps": 15,
