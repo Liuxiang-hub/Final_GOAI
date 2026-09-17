@@ -1,0 +1,33 @@
+# GOAI dual-PIPER Real-Time Chunking profile.
+# This is an offline-qualified starting point, NOT a real-robot-qualified file.
+processor: real_time_chunking
+prediction_horizon: 50
+control_hz: 25.0
+
+rtc:
+  # Start a new inference after 15 actually executed actions (0.6 s at 25 Hz).
+  minimum_execution_steps: 15
+  # Conservative first estimate for a few-hundred-ms end-to-end delay.
+  # Runtime then uses max(observed delays) over the latest 10 inferences.
+  initial_delay_steps: 10
+  delay_buffer_size: 10
+  guidance_beta: 5.0
+
+safety:
+  require_post_action_commit: true
+  stop_if_plan_exhausted: true
+  reject_nan_or_inf: true
+
+# RTC already provides cross-chunk continuity in normalized action space.
+# Keep legacy temporal ensembling out of the first A/B test to avoid hiding
+# RTC behavior or adding extra lag. It remains available as a rollback profile.
+post_filter:
+  enabled: false
+  rollback_config: configs/deploy_temporal_adaptive.yaml
+
+validation_gates:
+  - delay_injection_offline
+  - gpu_rtc_latency_benchmark
+  - stationary_robot_dry_run
+  - low_speed_single_arm
+  - low_speed_dual_arm

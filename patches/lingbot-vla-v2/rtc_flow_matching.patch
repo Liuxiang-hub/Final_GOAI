@@ -1,0 +1,266 @@
+diff --git a/deploy/lingbot_vla_v2_policy.py b/deploy/lingbot_vla_v2_policy.py
+index 96b9acb..b6888e0 100644
+--- a/deploy/lingbot_vla_v2_policy.py
++++ b/deploy/lingbot_vla_v2_policy.py
+@@ -100,6 +100,9 @@ class PolicyPreprocessMixin:
+         use_compile: bool = False,
+         capture_time: bool = False,
+         sample_compile_fn: callable = None,
++        rtc_actions=None,
++        rtc_weights=None,
++        rtc_beta: float = 5.0,
+     ) -> Tensor:
+         """Run one model forward for a batch of already-transformed observations.
+ 
+@@ -121,6 +124,12 @@ class PolicyPreprocessMixin:
+         state = observation["state"]
+         image_grid_thw = observation.get("image_grid_thw", None)
+ 
++        # RTC needs autograd with respect to the noisy action tensor for its
++        # vector-Jacobian product. Keep the ordinary path compiled, but use the
++        # eager sampler for guided requests until this path is GPU-qualified.
++        if rtc_actions is not None:
++            sample_compile_fn = self.model.sample_actions
++
+         has_batch_dim = img_masks.ndim >= 2
+         if not has_batch_dim:
+             images = images.unsqueeze(0)
+@@ -141,6 +150,9 @@ class PolicyPreprocessMixin:
+                             lang_masks.to(device=device),
+                             state.to(dtype=dtype, device=device),
+                             image_grid_thw=self._to_device_image_grid_thw(image_grid_thw, device),
++                            rtc_actions=rtc_actions,
++                            rtc_weights=rtc_weights,
++                            rtc_beta=rtc_beta,
+                     )
+                 torch.cuda.synchronize()
+ 
+@@ -156,6 +168,9 @@ class PolicyPreprocessMixin:
+                                     lang_masks.to(device=device),
+                                     state.to(dtype=dtype, device=device),
+                                     image_grid_thw=self._to_device_image_grid_thw(image_grid_thw, device),
++                                    rtc_actions=rtc_actions,
++                                    rtc_weights=rtc_weights,
++                                    rtc_beta=rtc_beta,
+                     )
+                     ends[i].record()
+                 torch.cuda.synchronize()
+@@ -169,6 +184,9 @@ class PolicyPreprocessMixin:
+                             lang_masks.to(device=device),
+                             state.to(dtype=dtype, device=device),
+                             image_grid_thw=self._to_device_image_grid_thw(image_grid_thw, device),
++                            rtc_actions=rtc_actions,
++                            rtc_weights=rtc_weights,
++                            rtc_beta=rtc_beta,
+             )
+ 
+         delta_time = time.time() - s1
+@@ -432,7 +450,7 @@ class LingbotVLAv2Server:
+             return torch.stack(padded, dim=0)
+ 
+         raise ValueError(f"Cannot batch tensors with different shapes: {shapes}")
+-    def _infer_batch(self, observations, return_normalized=False):
++    def _infer_batch(self, observations, return_normalized=False, rtc=None):
+         if not isinstance(observations, (list, tuple)) or len(observations) == 0:
+             raise ValueError("batch observation must be a non-empty list")
+         applied = [self._prepare_model_input(obs) for obs in observations] # bsize, dict{key }
+@@ -445,12 +463,25 @@ class LingbotVLAv2Server:
+             else:
+                 batch_observation[key] = values
+ 
++        rtc_actions = None
++        rtc_weights = None
++        rtc_beta = 5.0
++        if rtc is not None:
++            if len(observations) != 1:
++                raise ValueError("RTC currently supports one robot observation per request")
++            rtc_actions = torch.as_tensor(rtc["actions"], dtype=torch.float32)
++            rtc_weights = torch.as_tensor(rtc["weights"], dtype=torch.float32)
++            rtc_beta = float(rtc.get("beta", 5.0))
++
+         actions = self.vla.sample_actions_batch(
+             batch_observation,
+             self.use_bf16,
+             self.use_compile,
+             capture_time=False,
+             sample_compile_fn = self.sample_actions_fn,
++            rtc_actions=rtc_actions,
++            rtc_weights=rtc_weights,
++            rtc_beta=rtc_beta,
+         )
+         
+         unnormalized_actions = self._unapply_batched_actions(applied, actions)
+@@ -460,6 +491,12 @@ class LingbotVLAv2Server:
+         
+     def infer(self, observation, center_crop=True, return_normalized=False):
+         """Generates an action with the VLA policy."""
++        # Transport-only keys must not enter FeatureTransform.
++        observation = dict(observation)
++        rtc = observation.pop("_rtc", None)
++        rtc_return_normalized = bool(
++            observation.pop("_rtc_return_normalized", False)
++        )
+         # (If trained with image augmentations) Center crop image and then resize back up to original size.
+         # IMPORTANT: Let's say crop scale == 0.9. To get the new height and width (post-crop), multiply
+         #            the original height and width by sqrt(0.9) -- not 0.9!
+@@ -467,6 +504,9 @@ class LingbotVLAv2Server:
+             self.reset(robo_name=observation['robo_name'], path_to_pi_model=observation['path_to_pi_model'] if 'path_to_pi_model' in observation else None)
+             return dict(action = None)
+ 
++        if rtc is not None or rtc_return_normalized:
++            # The normalized chunk is required by the next RTC request.
++            return_normalized = True
+         is_batch = 'batch' in observation
+         observations = observation['batch'] if is_batch else [observation]
+         if not self.chunk_ret and self.use_length <= 0:
+@@ -484,9 +524,10 @@ class LingbotVLAv2Server:
+                 unnormalized_actions, normalized_actions = self._infer_batch(
+                     observations,
+                     return_normalized=True,
++                    rtc=rtc,
+                 )
+             else:
+-                unnormalized_actions = self._infer_batch(observations)
++                unnormalized_actions = self._infer_batch(observations, rtc=rtc)
+                 normalized_actions = None
+             if self.use_length > 0:
+                 for output_key in unnormalized_actions.keys():
+@@ -605,4 +646,4 @@ def main():
+ 
+ 
+ if __name__ == "__main__":
+-    main()
+\ No newline at end of file
++    main()
+diff --git a/lingbotvla/models/vla/lingbot_vla/modeling_lingbot_vla_v2.py b/lingbotvla/models/vla/lingbot_vla/modeling_lingbot_vla_v2.py
+index 44ccf04..3b2e14d 100644
+--- a/lingbotvla/models/vla/lingbot_vla/modeling_lingbot_vla_v2.py
++++ b/lingbotvla/models/vla/lingbot_vla/modeling_lingbot_vla_v2.py
+@@ -926,8 +926,17 @@ class FlowMatchingV2(FlowMatchingV1):
+         state,
+         noise=None,
+         image_grid_thw=None,
++        rtc_actions=None,
++        rtc_weights=None,
++        rtc_beta=5.0,
+     ) -> Tensor:
+-        """Do a full Qwen3-VL inference forward and compute the action."""
++        """Do a full Qwen3-VL inference forward and compute the action.
++
++        When ``rtc_actions`` and ``rtc_weights`` are provided, apply the
++        PiGDM guidance used by Real-Time Chunking (RTC) at every flow step.
++        Both tensors must already be in the model's normalized action space.
++        The ordinary sampling path is unchanged when they are omitted.
++        """
+         bsize = state.shape[0]
+         device = state.device
+         dtype = state.dtype
+@@ -940,6 +949,33 @@ class FlowMatchingV2(FlowMatchingV1):
+             )
+             noise = torch.randn(actions_shape, device=device, dtype=dtype)
+ 
++        rtc_enabled = rtc_actions is not None or rtc_weights is not None
++        if rtc_enabled:
++            if rtc_actions is None or rtc_weights is None:
++                raise ValueError("rtc_actions and rtc_weights must be provided together")
++            rtc_actions = torch.as_tensor(rtc_actions, device=device, dtype=dtype)
++            rtc_weights = torch.as_tensor(rtc_weights, device=device, dtype=dtype)
++            if rtc_actions.ndim == 2:
++                rtc_actions = rtc_actions.unsqueeze(0)
++            if rtc_weights.ndim == 1:
++                rtc_weights = rtc_weights.unsqueeze(0)
++            if rtc_actions.shape != noise.shape:
++                raise ValueError(
++                    f"rtc_actions shape {tuple(rtc_actions.shape)} must match "
++                    f"sample shape {tuple(noise.shape)}"
++                )
++            if rtc_weights.shape != noise.shape[:2]:
++                raise ValueError(
++                    f"rtc_weights shape {tuple(rtc_weights.shape)} must match "
++                    f"(batch, horizon) {tuple(noise.shape[:2])}"
++                )
++            if not torch.isfinite(rtc_actions).all() or not torch.isfinite(rtc_weights).all():
++                raise ValueError("RTC guidance contains NaN or Inf")
++            if (rtc_weights < 0).any() or (rtc_weights > 1).any():
++                raise ValueError("RTC weights must be in [0, 1]")
++            if rtc_beta <= 0:
++                raise ValueError(f"rtc_beta must be positive, got {rtc_beta}")
++
+         (
+             prefix_embs,
+             prefix_pad_masks,
+@@ -973,7 +1009,7 @@ class FlowMatchingV2(FlowMatchingV1):
+         time = torch.tensor(1.0, dtype=dtype, device=device)
+         count = 0
+         predict_velocity_fn = self.predict_velocity
+-        if getattr(self, "_use_compile_predict_velocity", False):
++        if getattr(self, "_use_compile_predict_velocity", False) and not rtc_enabled:
+             predict_velocity_fn = getattr(self, "_compiled_predict_velocity", None)
+             if predict_velocity_fn is None:
+                 predict_velocity_fn = torch.compile(
+@@ -987,16 +1023,55 @@ class FlowMatchingV2(FlowMatchingV1):
+         while time >= -dt / 2:
+             count += 1
+             expanded_time = time.expand(bsize)
+-            v_t = predict_velocity_fn(
+-                state,
+-                prefix_pad_masks,
+-                past_key_values,
+-                x_t,
+-                expanded_time,
+-                prefix_position_ids=prefix_position_ids,
+-            )
+-
+-            x_t += dt * v_t
++            if rtc_enabled:
++                # LingBot parameterizes t=1 as noise and t=0 as data, while
++                # the RTC paper uses tau=0 as noise and tau=1 as data. Thus
++                # tau=1-t and the denoised action estimate is x_t - t*v_t.
++                with torch.enable_grad():
++                    x_t = x_t.detach().requires_grad_(True)
++                    v_t = predict_velocity_fn(
++                        state,
++                        prefix_pad_masks,
++                        past_key_values,
++                        x_t,
++                        expanded_time,
++                        prefix_position_ids=prefix_position_ids,
++                    )
++                    action_estimate = x_t - time * v_t
++                    weighted_error = (
++                        rtc_actions - action_estimate
++                    ) * rtc_weights.unsqueeze(-1)
++                    guidance = torch.autograd.grad(
++                        outputs=action_estimate,
++                        inputs=x_t,
++                        grad_outputs=weighted_error,
++                        retain_graph=False,
++                        create_graph=False,
++                    )[0]
++
++                    tau = 1.0 - time
++                    r_squared = time.square() / (tau.square() + time.square())
++                    if float(tau) <= 0.0:
++                        guidance_scale = torch.as_tensor(
++                            rtc_beta, device=device, dtype=dtype
++                        )
++                    else:
++                        guidance_scale = torch.clamp(
++                            time / (tau * r_squared), max=float(rtc_beta)
++                        )
++                    x_t = (
++                        x_t + dt * v_t - dt * guidance_scale * guidance
++                    ).detach()
++            else:
++                v_t = predict_velocity_fn(
++                    state,
++                    prefix_pad_masks,
++                    past_key_values,
++                    x_t,
++                    expanded_time,
++                    prefix_position_ids=prefix_position_ids,
++                )
++                x_t += dt * v_t
+             time += dt
+         print(f"Denoise {count} steps")
+         return x_t
