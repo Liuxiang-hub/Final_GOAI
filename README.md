@@ -467,9 +467,9 @@ export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_rtc_server.sh
 ```
 
-当前参数为 `H=50`、25 Hz、`minimum_execution_steps=15`、初始延迟估计10步、延迟窗口10次、`beta=5`。代码不会自行驱动机械臂；实际机器人循环必须在SDK确认动作被消费后调用 `commit()`。若50步计划耗尽，系统抛出 `RTCPlanExhausted`，上层必须安全停机。完整说明与上线门槛见 [RTC_DEPLOYMENT.md](RTC_DEPLOYMENT.md)。
+当前参数为 `H=50`、25 Hz、`minimum_execution_steps=15`、5步 Flow-Matching、初始延迟估计10步、延迟窗口10次、`beta=5`。RTX 6000D WebSocket实测在0/100/200 ms额外延迟下均未超过1.4秒缓冲，300 ms起超限；六任务固定验证块抽检未发现5步相对10步明显退化。代码不会自行驱动机械臂；实际机器人循环必须在SDK确认动作被消费后调用 `commit()`。若50步计划耗尽，系统抛出 `RTCPlanExhausted`，上层必须安全停机。完整数据、限制与上线门槛见 [RTC_DEPLOYMENT.md](RTC_DEPLOYMENT.md)。
 
-仓库已删除旧四块时序集成、自适应EMA和振荡抑制的可执行代码与配置。此前生成的开环图仅作为历史模型分析材料，不代表当前RTC执行效果；RTC必须重新运行完整validation episode和延迟注入评估。
+仓库已删除旧四块时序集成、自适应EMA和振荡抑制的可执行代码与配置。此前生成的开环图仅作为历史模型分析材料，不代表当前RTC执行效果；RTC延迟注入与六任务固定块抽检已完成，完整validation episode和真机闭环评估仍待现场完成。
 
 ## 8. 🌐 全部开源说明
 

@@ -1,5 +1,5 @@
 diff --git a/deploy/lingbot_vla_v2_policy.py b/deploy/lingbot_vla_v2_policy.py
-index 96b9acb..b6888e0 100644
+index 96b9acb..bef964c 100644
 --- a/deploy/lingbot_vla_v2_policy.py
 +++ b/deploy/lingbot_vla_v2_policy.py
 @@ -100,6 +100,9 @@ class PolicyPreprocessMixin:
@@ -125,7 +125,41 @@ index 96b9acb..b6888e0 100644
                  normalized_actions = None
              if self.use_length > 0:
                  for output_key in unnormalized_actions.keys():
-@@ -605,4 +646,4 @@ def main():
+@@ -522,6 +563,8 @@ class LingbotVLAv2Server:
+         result = action
+         if return_normalized:
+             result = dict(result)
++            if isinstance(normalized_action, torch.Tensor):
++                normalized_action = normalized_action.float().cpu().numpy()
+             result["_normalized_actions"] = normalized_action
+ 
+         self.global_step += 1
+@@ -590,8 +633,18 @@ def main():
+         default=True,
+     )
+ 
++    parser.add_argument(
++        "--num_denoising_steps",
++        type=int,
++        default=10,
++        help="number of Flow-Matching sampling steps",
++    )
++
+     args = parser.parse_args()
+ 
++    if args.num_denoising_steps < 1:
++        parser.error("--num_denoising_steps must be positive")
++
+     model = LingbotVLAv2Server(
+         args.model_path,
+         use_length=args.use_length,
+@@ -600,9 +653,10 @@ def main():
+         use_fp32=args.use_fp32,
+         use_compile=args.use_compile,
+     )
++    model.vla.model.config.num_steps = args.num_denoising_steps
+     model_server = WebsocketPolicyServer(model, port=args.port)
+     model_server.serve_forever()
  
  
  if __name__ == "__main__":

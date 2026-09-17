@@ -3,6 +3,7 @@
 processor: real_time_chunking
 prediction_horizon: 50
 control_hz: 25.0
+num_denoising_steps: 5
 
 rtc:
   # Start a new inference after 15 actually executed actions (0.6 s at 25 Hz).

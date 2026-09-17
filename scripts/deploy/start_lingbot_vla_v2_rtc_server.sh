@@ -9,6 +9,7 @@ set -euo pipefail
 model_path="${MODEL_PATH:?Set MODEL_PATH to the selected global_step_8884 hf_ckpt directory}"
 port="${PORT:-8006}"
 prediction_horizon=50
+num_denoising_steps="${NUM_DENOISING_STEPS:-5}"
 
 test -s "${model_path}/model.safetensors.index.json"
 
@@ -19,4 +20,5 @@ exec python -m deploy.lingbot_vla_v2_policy \
   --use_bf16 true \
   --use_fp32 false \
   --use_compile false \
+  --num_denoising_steps "${num_denoising_steps}" \
   --port "${port}"

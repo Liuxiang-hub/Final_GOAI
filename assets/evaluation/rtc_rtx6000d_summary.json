@@ -1,0 +1,25 @@
+{
+  "date": "2026-09-18",
+  "gpu": "NVIDIA RTX 6000D 84GB",
+  "checkpoint": "global_step_8884",
+  "dtype": "bfloat16",
+  "prediction_horizon": 50,
+  "control_hz": 25,
+  "minimum_execution_steps": 15,
+  "available_buffer_ms": 1400,
+  "rtc_5step_process_ms": {"mean": 984.03, "p95": 997.35, "max": 1002.76},
+  "rtc_10step_process_ms": {"mean": 1908.88, "p95": 1965.14, "max": 1993.32},
+  "websocket_5step_max_ms_by_injected_delay": {
+    "0": 1110.17,
+    "100": 1232.71,
+    "200": 1280.39,
+    "300": 1488.38,
+    "400": 1478.98
+  },
+  "six_task_fixed_chunk": {
+    "episodes": [13, 119, 215, 307, 423, 505],
+    "5_steps": {"mean_mse": 0.00193549, "mean_mae": 0.02400451},
+    "10_steps": {"mean_mse": 0.00241173, "mean_mae": 0.02561436}
+  },
+  "scope": "Offline open-loop and localhost WebSocket validation only; no powered robot motion."
+}

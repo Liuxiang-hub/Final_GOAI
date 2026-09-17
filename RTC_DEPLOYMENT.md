@@ -2,7 +2,7 @@
 
 本工程将 [Real-Time Chunking](https://arxiv.org/abs/2506.07339) 接入 LingBot-VLA 2.0 的 Flow-Matching 推理链路，用于消除同步推理造成的数百毫秒停顿。RTC 不重新训练 VLA；它让机器人执行当前动作块的同时，在后台生成下一动作块，并用上一块的剩余动作约束新块。
 
-> 当前状态：CPU 契约、并发、软掩码和动作耗尽停机测试通过；尚未完成 RTX 6000D 的真实 checkpoint 延迟测试与双 PIPER 低速验证，因此不能直接用于带电比赛运行。
+> 当前状态：CPU 契约测试、RTX 6000D 真实 checkpoint 推理、WebSocket 闭环和延迟注入测试均已通过；双 PIPER 静止干跑与低速验证尚未完成，因此仍不能直接用于带电比赛运行。
 
 ## 1. 实现结构
 
@@ -42,7 +42,7 @@ export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_rtc_server.sh
 ```
 
-RTC需要对noisy action计算vector-Jacobian product。当前RTC候选启动脚本关闭 `torch.compile`，先以正确性和可诊断性为主；完成RTX 6000D eager/compile A/B后再决定是否开启编译。
+RTC需要对noisy action计算vector-Jacobian product。当前启动脚本关闭 `torch.compile` 并默认使用5步 Flow-Matching；RTX 6000D 实测表明10步RTC无法满足1.4秒缓冲，而5步能够满足。
 
 ## 4. 接入机器人循环
 
@@ -84,3 +84,24 @@ git apply --check patches/lingbot-vla-v2/rtc_flow_matching.patch
 ```
 
 测试覆盖：延迟换算、指数软掩码、剩余计划右侧填充、推理阻塞时继续执行、返回后按实际延迟对齐，以及动作块耗尽时强制报停。
+
+RTX 6000D（84 GB）、BF16、step8884、`H=50`、25 Hz、15步后开始异步重规划的实测结果：
+
+| 测试 | 结果 |
+| --- | --- |
+| 10步RTC进程内延迟 | 平均1.909 s，P95 1.965 s，不满足1.4 s缓冲 |
+| 5步RTC进程内延迟 | 平均0.984 s，P95 0.997 s，满足缓冲 |
+| WebSocket + 0/100/200 ms注入 | 最大1.110/1.233/1.280 s，均满足缓冲 |
+| WebSocket + 300/400 ms注入 | 最大1.488/1.479 s，超过缓冲 |
+| 六任务固定验证块，5步 | MSE 0.00194，MAE 0.02400，全部有限值 |
+| 六任务固定验证块，10步 | MSE 0.00241，MAE 0.02561，全部有限值 |
+
+六任务结果只是一任务一个固定验证 episode 首帧的50步开环抽检，说明5步没有出现明显退化，不等价于真机成功率。现场L20必须重新运行同一延迟基准；当前可接受的额外端到端延迟预算约为200 ms，不能把300 ms当作安全配置。
+
+复现实测使用：
+
+```bash
+python scripts/deploy/benchmark_rtc_gpu.py --help
+python scripts/deploy/benchmark_rtc_websocket.py --help
+python scripts/deploy/benchmark_denoising_quality_websocket.py --help
+```
