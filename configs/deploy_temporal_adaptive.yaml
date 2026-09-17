@@ -1,5 +1,5 @@
-# Selected GOAI dual-PIPER offline deployment profile (2026-08-31).
-# Must still pass low-speed real-robot closed-loop validation before competition use.
+# RTC之前完成离线验证的回退方案（2026-08-31）。
+# 当前首选入口为deploy_rtc.yaml；本文件只用于故障回退和受控A/B。
 processor: temporal_ensemble_adaptive_ema
 prediction_horizon: 50
 execute_steps: 15

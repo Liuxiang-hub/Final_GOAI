@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The model server returns the full trained 50-step action chunk. The robot
-# client executes 15 steps, observes again, and applies the timestamp-aligned
-# filter configured in configs/deploy_temporal_adaptive.yaml.
+# Legacy rollback server: returns a full 50-step chunk for the pre-RTC temporal
+# ensemble client. The current entry is start_lingbot_vla_v2_rtc_server.sh.
 
 model_path="${MODEL_PATH:?Set MODEL_PATH to the selected hf_ckpt directory}"
 port="${PORT:-8006}"

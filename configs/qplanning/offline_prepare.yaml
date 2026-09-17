@@ -37,14 +37,15 @@
   },
   "deployment": {
     "execute_steps": 15,
-    "postprocessor": "configs/deploy_temporal_adaptive.yaml",
+    "postprocessor": "configs/deploy_rtc.yaml",
+    "rollback_postprocessor": "configs/deploy_temporal_adaptive.yaml",
     "order": [
-      "sample_lingbot_candidates",
+      "rtc_guided_sample_lingbot_candidates",
       "normalize_and_validate",
       "q_score_and_weight",
-      "temporal_ensemble_and_adaptive_ema",
+      "rtc_align_new_chunk_to_actual_delay",
       "robot_safety_limits",
-      "execute_first_15_steps"
+      "execute_at_25hz_and_commit_after_sdk_ack"
     ]
   },
   "safety_gate": {

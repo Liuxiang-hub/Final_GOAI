@@ -1,5 +1,5 @@
-# Traceability copy of the offline-validated profile. The formal profile now lives
-# in deploy_temporal_adaptive.yaml; retain this file for controlled real-robot A/B.
+# Traceability copy of the pre-RTC offline profile. The current entry is
+# deploy_rtc.yaml; retain this file only for legacy controlled A/B.
 processor: temporal_ensemble_adaptive_ema
 prediction_horizon: 50
 execute_steps: 15

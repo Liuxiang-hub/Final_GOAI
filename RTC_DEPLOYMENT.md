@@ -42,7 +42,7 @@ export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_rtc_server.sh
 ```
 
-RTC 需要对 noisy action 计算 vector-Jacobian product。当前正式 RTC 启动脚本关闭 `torch.compile`，先以正确性和可诊断性为主；完成 RTX 6000D eager/compile A/B 后再决定是否开启编译。
+RTC需要对noisy action计算vector-Jacobian product。当前RTC候选启动脚本关闭 `torch.compile`，先以正确性和可诊断性为主；完成RTX 6000D eager/compile A/B后再决定是否开启编译。
 
 ## 4. 接入机器人循环
 

@@ -61,29 +61,29 @@ model.safetensors.index.json
 
 加载器通过索引自动组合三个分片。Tokenizer、预处理器和模型配置文件必须与权重一起保留。
 
-## 闭环部署与动作消抖
+## RTC异步闭环部署
 
-模型服务端始终返回完整 50 步预测。机器人客户端执行 15 步后重新观测并再次推理，不能把 50 步全部开环执行。
+模型服务端返回完整50步预测。当前工程入口采用RTC：客户端执行旧动作块时，GPU后台生成下一块；新块通过PiGDM与旧块剩余轨迹保持连续，返回后按推理期间已经执行的步数对齐。不能把50步全部开环执行。
 
-当前部署后处理位于 `deployment/`：
+RTC代码位于GitHub工程仓库：
 
 ```text
-deployment/
-├── deploy_temporal_adaptive.yaml
-├── action_chunk_blender.py
-└── temporal_ensemble_filter.py
+configs/deploy_rtc.yaml
+scripts/deploy/real_time_chunking.py
+scripts/deploy/rtc_client_adapter.py
+patches/lingbot-vla-v2/rtc_flow_matching.patch
 ```
 
-正式离线配置包含：
+当前RTC起始配置包含：
 
-- 15-step 闭环重规划；
-- 最近 4 个 action chunks 按绝对控制时刻对齐；
-- 共识门控抑制相互矛盾的预测；
-- 自适应 EMA，在快速动作和静止保持之间切换；
-- 7-step 振荡检测，识别连续小幅反向摆动；
-- 累积死区关闭，避免产生“保持—跳变”台阶。
+- 25Hz控制与50-step动作块；
+- 最短执行15步后启动后台推理；
+- 初始延迟估计10步，并使用最近10次实际延迟的最大值；
+- `beta=5`的PiGDM软约束；
+- 新块按实际执行步数对齐；
+- 旧块耗尽时强制安全报停。
 
-消抖属于客户端部署逻辑，不在 safetensors 权重内部。只下载模型权重可以得到原始 50-step 动作，但不会自动获得上述时序融合效果。
+RTC不在safetensors权重内部，只下载模型权重不会自动得到异步调度或PiGDM引导。旧四块时序集成、自适应EMA和振荡抑制仍保留为RTC异常时的回退方案，不与RTC默认叠加。RTC目前完成CPU代码验证，尚待RTX 6000D延迟和双PIPER低速验证。
 
 ## 下载
 
@@ -112,7 +112,7 @@ print(model_dir)
 
 - 当前只完成离线开环回放与全 episode 误差评估；
 - 尚未给出双 PIPER 真机成功率；
-- 后处理阈值仍需在真实控制频率和动作坐标系下复核；
+- RTC延迟、时间对齐与必要的轻量滤波仍需在真实控制频率下复核；
 - 不应仅凭最低 loss 判断比赛最终模型。
 
 ## 工程仓库

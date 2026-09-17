@@ -151,7 +151,7 @@ LegacyActionChunkBlender = ActionChunkBlender
 
 
 class ActionChunkBlender:
-    """Selected GOAI entry: temporal ensemble, consensus and adaptive smoothing.
+    """Pre-RTC rollback: temporal ensemble, consensus and adaptive smoothing.
 
     The public client API remains ``process(full_50_step_chunk)``; absolute
     chunk start indices are maintained internally. No deadband is applied.
@@ -179,7 +179,7 @@ class ActionChunkBlender:
         **legacy_options,
     ) -> None:
         if enable_deadband:
-            raise ValueError("deadband is disabled in the formal deployment")
+            raise ValueError("deadband is disabled in the legacy rollback profile")
         try:
             from .temporal_ensemble_filter import TemporalEnsembleFilter
         except ImportError:

@@ -30,4 +30,7 @@ frozen_test:
   jerk_p999: 0.30845066
   status: offline_test_complete_pending_real_robot_validation
 
-deployment_profile: configs/deploy_temporal_adaptive.yaml
+deployment_profile: configs/deploy_rtc.yaml
+deployment_status: rtc_cpu_verified_pending_gpu_and_real_robot
+rollback_profile: configs/deploy_temporal_adaptive.yaml
+selection_evaluation_profile: configs/deploy_temporal_adaptive.yaml

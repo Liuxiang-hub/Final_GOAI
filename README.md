@@ -39,8 +39,8 @@ Final_GOAI/
 ├── configs/
 │   ├── goai_piper_x.yaml                    # 双 PIPER 关节、夹爪与三相机映射
 │   ├── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
-│   ├── deploy_temporal_adaptive.yaml        # 当前离线部署后处理参数
-│   ├── deploy_temporal_consensus_experimental.yaml # 当前参数的可追溯实验副本
+│   ├── deploy_temporal_adaptive.yaml        # RTC之前的离线验证回退参数
+│   ├── deploy_temporal_consensus_experimental.yaml # 旧回退参数的可追溯实验副本
 │   ├── deploy_rtc.yaml                      # RTC 异步推理与安全门参数
 │   ├── qplanning/
 │   │   └── offline_prepare.yaml             # Q升级契约、回退与安全门（默认关闭）
@@ -55,11 +55,11 @@ Final_GOAI/
 │   │   ├── create_lerobot_episode_splits.py
 │   │   └── validate_lerobot_v30_joint.py
 │   ├── deploy/
-│   │   ├── start_lingbot_vla_v2_server.sh      # 启动模型服务端，始终返回完整 50-step chunk
+│   │   ├── start_lingbot_vla_v2_server.sh      # 旧时序集成回退服务端
 │   │   ├── start_lingbot_vla_v2_rtc_server.sh  # 启动支持 RTC 引导的模型服务端
 │   │   ├── real_time_chunking.py                # 异步双缓冲、软掩码与延迟对齐
 │   │   ├── rtc_client_adapter.py                # 官方 websocket 客户端 RTC 适配
-│   │   ├── action_chunk_blender.py              # 客户端 15-step 重规划与当前自适应后处理
+│   │   ├── action_chunk_blender.py              # RTC异常时的旧时序后处理回退
 │   │   └── temporal_ensemble_filter.py           # 时序集成基础实现
 │   ├── qplanning/                            # Q加权、LingBot适配契约、回放清单与预检
 │   └── render_historical_dashboard.py       # 重绘历史 500-frame 初筛仪表盘
@@ -236,7 +236,8 @@ LingBot-VLA 2.0 不是简单的“看图后回归关节值”，而是把语言�
 | 预测式世界动态 | 预测未来深度和视频表征作为辅助目标 | 强化双臂配合、抓取状态判断和长时序操作 |
 | Flow Matching | 从噪声轨迹逐步生成连续动作分布 | 能表达多种合理操作轨迹，不局限于单一均值动作 |
 | 50-step Action Chunk | 单次输出连续动作窗口 | 提高短时动作连贯性，降低闭环推理频率 |
-| 15-step Closed-loop Replan | 返回 50 步、执行 15 步后重观测；按绝对时刻集成最近 4 个 chunks，并采用共识门控、自适应 EMA 与振荡抑制 | 减少长开环漂移、时序滞后、边界跳变和静止段抖动 |
+| RTC Asynchronous Replan | 返回50步；执行满15步后后台推理，旧块持续供给动作，新块用PiGDM软约束并按真实延迟对齐切换 | 消除同步等待停顿，同时抑制跨块路线跳变 |
+| Legacy Temporal Ensemble | 最近4个chunks、共识门控、自适应EMA与振荡抑制 | RTC异常或A/B失败时的可追溯回退，不是当前RTC默认链路 |
 | 多视角融合 | 联合顶部与左右腕部相机 | 同时掌握全局布局和双手局部接触细节 |
 
 ### 3.1 🧩 统一 55 维动作/状态表示
@@ -455,9 +456,9 @@ steps_per_epoch = floor(568610 / global_batch_size)
 - 设置关节限位、速度/加速度限制、急停和通信超时保护；
 - 先低速、短动作窗口和人工急停监护，再提高执行速度。
 
-### 7.1 15-step 闭环重规划与四块时序集成
+### 7.1 旧15-step四块时序集成（回退基线）
 
-模型按训练配置预测完整的 50-step action chunk，服务端每次返回完整 50 步。客户端只执行 15 步，随后重新采集顶部、左腕、右腕图像与双臂状态并再次推理。客户端按绝对控制时刻对齐最近 4 个 action chunks，使用共识门控抑制相互矛盾的预测，再以自适应 EMA 平衡快速响应与稳定保持，并用 7-step 振荡检测器压制连续小幅反向摆动。
+该方案是RTC接入前用于选模和离线完整episode评估的冻结基线：模型返回50步，客户端同步执行15步后重新推理，再对齐最近4个chunks并使用共识门控、自适应EMA和振荡抑制。它继续保留用于故障回退和A/B对照，但不再是当前首选部署入口。
 
 ```bash
 cd /path/to/lingbot-vla-v2
@@ -476,9 +477,9 @@ python -m deploy.lingbot_vla_v2_policy \
   --use_compile true
 ```
 
-机器人客户端必须显式接入 `scripts/deploy/action_chunk_blender.py` 中的 `ActionChunkBlender`，并按 `configs/deploy_temporal_adaptive.yaml` 实例化；服务端启动脚本本身只负责返回完整 50-step action chunk，不会替客户端截断或滤波。在 25 FPS 数据/控制频率下，客户端每执行 15 steps（约 0.6 秒）重新观测和推理；模型选择元数据见 `configs/selected_model.yaml`。
+只有选择旧回退链路时，机器人客户端才接入 `scripts/deploy/action_chunk_blender.py` 并使用 `configs/deploy_temporal_adaptive.yaml`。当前RTC入口使用 `scripts/deploy/real_time_chunking.py` 和 `configs/deploy_rtc.yaml`；两条链路不能同时默认启用。
 
-当前离线候选配置使用一致性门控，并用 7-step 窗口识别至少 3 次小幅方向反转；机械臂/夹爪识别阈值分别为 `0.030/0.100`，触发时使用 `alpha=0.05`。六任务完整离线回放中，微振荡总幅度下降约 44.95%，静止段抖动下降约 2.39%，Jerk RMS 下降约 1.97%，MSE 增加约 0.26%。`configs/deploy_temporal_consensus_experimental.yaml` 仅作为同参数的 A/B 追溯副本。该配置仍需确认滤波所处坐标系并完成低速真机验证；累积死区默认关闭，避免“保持—跳变”台阶。
+该历史回退配置使用一致性门控，并用7-step窗口识别至少3次小幅方向反转；机械臂/夹爪识别阈值分别为 `0.030/0.100`，触发时使用 `alpha=0.05`。六任务完整离线回放中，微振荡总幅度下降约44.95%，静止段抖动下降约2.39%，Jerk RMS下降约1.97%，MSE增加约0.26%。这些数字只描述旧链路，不代表RTC收益。`configs/deploy_temporal_consensus_experimental.yaml` 仅作为同参数的A/B追溯副本。
 
 ### 7.2 RTC 异步推理（当前升级入口）
 

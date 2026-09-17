@@ -10,6 +10,13 @@ cd lingbot-vla-v2
 git apply ../Final_GOAI/patches/lingbot-vla-v2/episode_split_loader.patch
 ```
 
+RTC部署还需应用推理补丁；训练环境不需要该补丁：
+
+```bash
+git apply --check ../Final_GOAI/patches/lingbot-vla-v2/rtc_flow_matching.patch
+git apply ../Final_GOAI/patches/lingbot-vla-v2/rtc_flow_matching.patch
+```
+
 随后把以下文件复制到 LingBot-VLA 对应位置：
 
 ```text
@@ -68,17 +75,17 @@ python tasks/vla/train_lingbotvla.py --config configs/vla/real_robot/goai_piper_
 
 实际训练入口请以上游当前版本为准。先运行 20–50 steps 冒烟测试，再按配置完成 8,884 steps；检查点保存于 2,221 / 3,332 / 4,442 / 5,553 / 6,663 / 7,774 / 8,884。
 
-## 5. 🤖 部署当前离线候选
+## 5. 🤖 部署当前RTC候选
 
-当前最终离线选择为 `global_step_8884`（2.00 epoch）：三个候选在60条完整验证episode上统一评估后选出，冻结模型与后处理，再由30条完整测试episode一次性确认。指标见 `configs/selected_model.yaml`、`assets/evaluation/validation60_three_checkpoint_summary.json` 和 `assets/evaluation/test30_full_step8884_summary.json`。服务端仍返回完整50-step chunk；客户端执行15步后重观测，并按 `configs/deploy_temporal_adaptive.yaml` 使用四块时序集成、共识门控、自适应EMA和振荡抑制。
+最终模型仍为 `global_step_8884`（2.00 epoch）：三个候选在60条完整验证episode上统一评估后选出，再由30条完整测试episode确认。上述选模使用的是RTC接入前冻结的四块时序回退基线，因此证明的是checkpoint选择，不是RTC真机效果。当前部署入口改为 `configs/deploy_rtc.yaml`：服务端返回50步，客户端执行旧块的同时后台生成新块并按真实延迟对齐。RTC尚需GPU延迟和低速真机验证。
 
 ```bash
 cd /path/to/lingbot-vla-v2
 export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
-bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
+bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_rtc_server.sh
 ```
 
-服务端启动脚本只返回完整50-step chunk；15-step截断与时序后处理必须在机器人客户端显式接入 `scripts/deploy/action_chunk_blender.py`，并按 `configs/deploy_temporal_adaptive.yaml` 配置。在连接机械臂前，必须依次完成输出维度、反归一化、关节顺序/单位/方向、夹爪范围、限位、速度/加速度、通信超时和急停验证。先空载低速运行，再逐任务闭环测试。离线最优不等于真机成功率最优。
+机器人客户端必须接入 `scripts/deploy/rtc_client_adapter.py`：每次只在SDK确认动作已执行后调用 `commit()`。默认不叠加旧四块时序集成；若RTC验证失败，可回退到 `start_lingbot_vla_v2_server.sh`、`action_chunk_blender.py` 和 `deploy_temporal_adaptive.yaml`。在连接机械臂前，必须完成RTC延迟注入、输出维度、反归一化、关节顺序/单位/方向、夹爪范围、限位、速度/加速度、通信超时和急停验证。详细步骤见 `RTC_DEPLOYMENT.md`。
 
 ## 6. 🔐 安全与许可证
 
