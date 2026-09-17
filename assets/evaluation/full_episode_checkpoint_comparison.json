@@ -1,4 +1,6 @@
 {
+  "evaluation_label": "Pre-RTC legacy temporal-ensemble evaluation",
+  "current_deployment_profile": "configs/deploy_rtc.yaml",
   "dataset": "validation",
   "episodes": 60,
   "episodes_per_task": 10,

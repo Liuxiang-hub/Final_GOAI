@@ -156,7 +156,7 @@ L_total = L_flow_action
 评估分为训练健康、离线六任务验证和双 PIPER 真机三层：
 
 1. **训练健康**：检查 NaN/Inf、总 loss、动作 loss、辅助 loss、梯度范数、显存、吞吐量、MoE 路由熵和专家使用率；出现专家塌缩、动作越界或 loss 突跳的检查点直接淘汰。
-2. **离线验证**：只使用 60 条 validation episodes，实际计算六任务 action MSE/MAE、Velocity RMSE、静止段速度 RMS、Jerk RMS、Jerk P99.9 和最差任务 MSE；所有候选均运行完整 episode，并使用相同的部署后处理参数。
+2. **历史离线验证**：只使用60条validation episodes，实际计算六任务action MSE/MAE、Velocity RMSE、静止段速度RMS、Jerk RMS、Jerk P99.9和最差任务MSE；这些结果生成于RTC接入之前，统一标记为 `Pre-RTC legacy temporal-ensemble evaluation`。
 3. **候选排序**：综合惩罚权重为 MSE 25%、MAE 20%、最差任务MSE 15%、Velocity RMSE 15%、静止段速度RMS 10%、Jerk RMS 10%、Jerk P99.9 5%，所有指标越低越好。
 4. **冻结测试**：由60条完整 validation episodes 选出 `global_step_8884` 并冻结模型与后处理后，30条 test episodes 各运行一次完整序列；结果仅用于最终报告，不再调参。由于这30条在流程纠正前曾用于前500帧快速初筛，本次完整测试属于冻结后的全长度确认，但不能宣称为从未观察过的严格独立测试。
 5. **真机验证（待完成）**：当前唯一候选 `global_step_8884` 先做动作反归一化、关节限位和低速空载回放，再进入双 PIPER 闭环测试；离线落选模型不再占用真机试验预算。
@@ -175,21 +175,29 @@ L_total = L_flow_action
 
 第一阶段曾以30条 test episodes 的前500帧对七个checkpoint进行快速初筛：`global_step_6663` 获得最低阶段性MSE，`global_step_8884` 获得最低阶段性MAE与速度误差。该用法后来被纠正，图中明确标记为历史筛选记录；它不代表完整episode最终选择，也不作为当前选模依据。
 
-![GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
+> **Pre-RTC legacy temporal-ensemble evaluation**
+
+![Pre-RTC legacy temporal-ensemble evaluation — GOAI Model Selection Dashboard](assets/evaluation/model_selection_dashboard.png)
 
 最终选模使用固定的60条验证集，对1.50 / 1.75 / 2.00 epoch三个候选运行六任务各10条完整episode，共64,811帧。三者使用完全一致的15-step重规划和冻结后处理；综合准确度、最差任务、速度、静止抖动、jerk与尾部尖峰后，`global_step_8884`排名第一。随后冻结该模型及全部后处理参数，在30条完整测试episode、32,581帧上一次性确认泛化表现。
 
-![GOAI Full-Episode Checkpoint Comparison](assets/evaluation/full_episode_checkpoint_comparison.png)
+> **Pre-RTC legacy temporal-ensemble evaluation**
+
+![Pre-RTC legacy temporal-ensemble evaluation — GOAI Full-Episode Checkpoint Comparison](assets/evaluation/full_episode_checkpoint_comparison.png)
 
 #### Six-Task Dual-Arm Action Prediction
 
 The overview below uses the lowest-MSE full test episode from each of the six tasks for the frozen `global_step_8884` pipeline. Every task shows four actions: its highest-variance left arm joint, left gripper, highest-variance right arm joint, and right gripper. Selection remains based on all 60 validation episodes—not on these favorable examples.
 
-![GOAI 2026 Six-Task Dual-Arm Action Prediction](assets/evaluation/goai_six_task_action_overview.png)
+> **Pre-RTC legacy temporal-ensemble evaluation**
+
+![Pre-RTC legacy temporal-ensemble evaluation — GOAI 2026 Six-Task Dual-Arm Action Prediction](assets/evaluation/goai_six_task_action_overview.png)
 
 #### Historical 500-Frame Screening Trend
 
-![GOAI Historical Checkpoint Screening Curve](assets/evaluation/checkpoint_test_loss_curve.svg)
+> **Pre-RTC legacy temporal-ensemble evaluation**
+
+![Pre-RTC legacy temporal-ensemble evaluation — GOAI Historical Checkpoint Screening Curve](assets/evaluation/checkpoint_test_loss_curve.svg)
 
 | Checkpoint | Epoch | Screening MSE ↓ | Screening MAE ↓ | Velocity RMSE ↓ | 历史初筛结论 |
 |---:|---:|---:|---:|---:|---|
