@@ -18,12 +18,10 @@ safety:
   stop_if_plan_exhausted: true
   reject_nan_or_inf: true
 
-# RTC already provides cross-chunk continuity in normalized action space.
-# Keep legacy temporal ensembling out of the first A/B test to avoid hiding
-# RTC behavior or adding extra lag. It remains available as a rollback profile.
+# RTC provides cross-chunk continuity in normalized action space. No temporal
+# ensemble, EMA, deadband, or oscillation post-filter is enabled.
 post_filter:
   enabled: false
-  rollback_config: configs/deploy_temporal_adaptive.yaml
 
 validation_gates:
   - delay_injection_offline

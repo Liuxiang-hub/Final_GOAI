@@ -39,8 +39,6 @@ Final_GOAI/
 ├── configs/
 │   ├── goai_piper_x.yaml                    # 双 PIPER 关节、夹爪与三相机映射
 │   ├── train_expert_only.yaml               # LingBot-VLA 2.0 第一阶段训练配置
-│   ├── deploy_temporal_adaptive.yaml        # RTC之前的离线验证回退参数
-│   ├── deploy_temporal_consensus_experimental.yaml # 旧回退参数的可追溯实验副本
 │   ├── deploy_rtc.yaml                      # RTC 异步推理与安全门参数
 │   ├── qplanning/
 │   │   └── offline_prepare.yaml             # Q升级契约、回退与安全门（默认关闭）
@@ -55,12 +53,9 @@ Final_GOAI/
 │   │   ├── create_lerobot_episode_splits.py
 │   │   └── validate_lerobot_v30_joint.py
 │   ├── deploy/
-│   │   ├── start_lingbot_vla_v2_server.sh      # 旧时序集成回退服务端
 │   │   ├── start_lingbot_vla_v2_rtc_server.sh  # 启动支持 RTC 引导的模型服务端
 │   │   ├── real_time_chunking.py                # 异步双缓冲、软掩码与延迟对齐
-│   │   ├── rtc_client_adapter.py                # 官方 websocket 客户端 RTC 适配
-│   │   ├── action_chunk_blender.py              # RTC异常时的旧时序后处理回退
-│   │   └── temporal_ensemble_filter.py           # 时序集成基础实现
+│   │   └── rtc_client_adapter.py                # 官方 websocket 客户端 RTC 适配
 │   ├── qplanning/                            # Q加权、LingBot适配契约、回放清单与预检
 │   └── render_historical_dashboard.py       # 重绘历史 500-frame 初筛仪表盘
 ├── tests/test_qplanning_preparation.py       # Q升级CPU契约测试
@@ -84,18 +79,16 @@ Final_GOAI/
 
 ## 2. 🔧 技术路线
 
-本项目采用三级路线，并保持可独立回退：
+本项目采用RTC主线和默认关闭的Q升级路线：
 
-- **已验证离线基线（回退）**：冻结 `global_step_8884`，执行50步动作预测、15步闭环重规划、四块时序集成、自适应 EMA、振荡抑制与机器人安全限制；
 - **RTC 当前升级方案**：不重训 VLA，在旧动作块执行期间异步生成新块，并用 PiGDM 软约束保证跨块连续；CPU 契约与补丁应用测试已通过，RTX 6000D 延迟和低速真机验证尚未完成；
-- **Q-Planning 升级方案（默认关闭）**：冻结同一个 `global_step_8884`，让 LingBot 生成多个候选动作块，由离线/在线 Q-function 评分并加权，再进入完全相同的后处理和安全链路。该路线用于吸收真机成功与失败 rollout，不替换当前基线。
+- **Q-Planning 升级方案（默认关闭）**：冻结同一个 `global_step_8884`，让 LingBot 生成多个RTC引导候选动作块，由离线/在线Q-function评分后进入相同的时间对齐和安全链路。该路线用于吸收真机成功与失败rollout，不替换当前RTC基线。
 
 RTC 的代码、配置、服务端补丁、控制循环顺序与上线安全门见 [RTC_DEPLOYMENT.md](RTC_DEPLOYMENT.md)。Q 升级方案见 [Q_PLANNING_UPGRADE.md](Q_PLANNING_UPGRADE.md)。在完成 GPU 延迟测试和低速 A/B 前，RTC 与 Q-Planning 都不能宣称已经过真机验证。
 
 2026-09-05已在正式服务器完成RGB链路审计：原始HDF5三相机9个抽样帧与官方 `decode_image_bit` 逐像素一致，LeRobot视频颜色顺序正确。当前step8884无需因RGB/BGR问题重训；后续数据转换已强制改用XPolicyLab官方解码入口。
 
 ```text
-Rollback:  observation -> LingBot step8884 -> temporal/adaptive filter -> safety -> PIPER
 RTC:       robot execution || LingBot guided inference -> aligned swap -> safety -> PIPER
 Q upgrade: observation -> LingBot N candidates -> Q weighting -> safety -> PIPER
 ```
@@ -237,7 +230,6 @@ LingBot-VLA 2.0 不是简单的“看图后回归关节值”，而是把语言�
 | Flow Matching | 从噪声轨迹逐步生成连续动作分布 | 能表达多种合理操作轨迹，不局限于单一均值动作 |
 | 50-step Action Chunk | 单次输出连续动作窗口 | 提高短时动作连贯性，降低闭环推理频率 |
 | RTC Asynchronous Replan | 返回50步；执行满15步后后台推理，旧块持续供给动作，新块用PiGDM软约束并按真实延迟对齐切换 | 消除同步等待停顿，同时抑制跨块路线跳变 |
-| Legacy Temporal Ensemble | 最近4个chunks、共识门控、自适应EMA与振荡抑制 | RTC异常或A/B失败时的可追溯回退，不是当前RTC默认链路 |
 | 多视角融合 | 联合顶部与左右腕部相机 | 同时掌握全局布局和双手局部接触细节 |
 
 ### 3.1 🧩 统一 55 维动作/状态表示
@@ -456,32 +448,7 @@ steps_per_epoch = floor(568610 / global_batch_size)
 - 设置关节限位、速度/加速度限制、急停和通信超时保护；
 - 先低速、短动作窗口和人工急停监护，再提高执行速度。
 
-### 7.1 旧15-step四块时序集成（回退基线）
-
-该方案是RTC接入前用于选模和离线完整episode评估的冻结基线：模型返回50步，客户端同步执行15步后重新推理，再对齐最近4个chunks并使用共识门控、自适应EMA和振荡抑制。它继续保留用于故障回退和A/B对照，但不再是当前首选部署入口。
-
-```bash
-cd /path/to/lingbot-vla-v2
-export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
-bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_server.sh
-```
-
-该入口等价于官方 V2 推理参数：
-
-```bash
-python -m deploy.lingbot_vla_v2_policy \
-  --model_path "$MODEL_PATH" \
-  --use_length 50 \
-  --chunk_ret true \
-  --use_bf16 true \
-  --use_compile true
-```
-
-只有选择旧回退链路时，机器人客户端才接入 `scripts/deploy/action_chunk_blender.py` 并使用 `configs/deploy_temporal_adaptive.yaml`。当前RTC入口使用 `scripts/deploy/real_time_chunking.py` 和 `configs/deploy_rtc.yaml`；两条链路不能同时默认启用。
-
-该历史回退配置使用一致性门控，并用7-step窗口识别至少3次小幅方向反转；机械臂/夹爪识别阈值分别为 `0.030/0.100`，触发时使用 `alpha=0.05`。六任务完整离线回放中，微振荡总幅度下降约44.95%，静止段抖动下降约2.39%，Jerk RMS下降约1.97%，MSE增加约0.26%。这些数字只描述旧链路，不代表RTC收益。`configs/deploy_temporal_consensus_experimental.yaml` 仅作为同参数的A/B追溯副本。
-
-### 7.2 RTC 异步推理（当前升级入口）
+### 7.1 RTC 异步推理（唯一部署入口）
 
 RTC 不再等15步执行完才同步请求下一块。客户端每确认执行一步就更新绝对动作索引；达到15步后，后台线程用最新观测发起推理，主循环继续消费旧块。服务端在归一化动作空间使用上一块剩余计划和指数软掩码进行 PiGDM 引导，新块返回后按推理期间实际执行的步数切换。
 
@@ -493,6 +460,8 @@ bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_rtc_server.sh
 ```
 
 当前参数为 `H=50`、25 Hz、`minimum_execution_steps=15`、初始延迟估计10步、延迟窗口10次、`beta=5`。代码不会自行驱动机械臂；实际机器人循环必须在SDK确认动作被消费后调用 `commit()`。若50步计划耗尽，系统抛出 `RTCPlanExhausted`，上层必须安全停机。完整说明与上线门槛见 [RTC_DEPLOYMENT.md](RTC_DEPLOYMENT.md)。
+
+仓库已删除旧四块时序集成、自适应EMA和振荡抑制的可执行代码与配置。此前生成的开环图仅作为历史模型分析材料，不代表当前RTC执行效果；RTC必须重新运行完整validation episode和延迟注入评估。
 
 ## 8. 🌐 全部开源说明
 

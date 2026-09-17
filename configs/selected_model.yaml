@@ -32,5 +32,4 @@ frozen_test:
 
 deployment_profile: configs/deploy_rtc.yaml
 deployment_status: rtc_cpu_verified_pending_gpu_and_real_robot
-rollback_profile: configs/deploy_temporal_adaptive.yaml
-selection_evaluation_profile: configs/deploy_temporal_adaptive.yaml
+selection_evaluation_profile: historical_pre_rtc_postprocessing_removed

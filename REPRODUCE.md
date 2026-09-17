@@ -77,7 +77,7 @@ python tasks/vla/train_lingbotvla.py --config configs/vla/real_robot/goai_piper_
 
 ## 5. 🤖 部署当前RTC候选
 
-最终模型仍为 `global_step_8884`（2.00 epoch）：三个候选在60条完整验证episode上统一评估后选出，再由30条完整测试episode确认。上述选模使用的是RTC接入前冻结的四块时序回退基线，因此证明的是checkpoint选择，不是RTC真机效果。当前部署入口改为 `configs/deploy_rtc.yaml`：服务端返回50步，客户端执行旧块的同时后台生成新块并按真实延迟对齐。RTC尚需GPU延迟和低速真机验证。
+最终模型仍为 `global_step_8884`（2.00 epoch）：三个候选在60条完整验证episode上统一评估后选出，再由30条完整测试episode确认。旧开环图生成于RTC接入之前，因此证明的是checkpoint选择，不是RTC执行效果。当前唯一部署入口为 `configs/deploy_rtc.yaml`：服务端返回50步，客户端执行旧块的同时后台生成新块并按真实延迟对齐。RTC尚需GPU延迟和低速真机验证。
 
 ```bash
 cd /path/to/lingbot-vla-v2
@@ -85,7 +85,7 @@ export MODEL_PATH=/path/to/global_step_8884/hf_ckpt
 bash /path/to/Final_GOAI/scripts/deploy/start_lingbot_vla_v2_rtc_server.sh
 ```
 
-机器人客户端必须接入 `scripts/deploy/rtc_client_adapter.py`：每次只在SDK确认动作已执行后调用 `commit()`。默认不叠加旧四块时序集成；若RTC验证失败，可回退到 `start_lingbot_vla_v2_server.sh`、`action_chunk_blender.py` 和 `deploy_temporal_adaptive.yaml`。在连接机械臂前，必须完成RTC延迟注入、输出维度、反归一化、关节顺序/单位/方向、夹爪范围、限位、速度/加速度、通信超时和急停验证。详细步骤见 `RTC_DEPLOYMENT.md`。
+机器人客户端必须接入 `scripts/deploy/rtc_client_adapter.py`：每次只在SDK确认动作已执行后调用 `commit()`。不叠加四块时序集成、EMA或振荡滤波；RTC异常或动作块耗尽时直接安全停止。在连接机械臂前，必须完成RTC延迟注入、输出维度、反归一化、关节顺序/单位/方向、夹爪范围、限位、速度/加速度、通信超时和急停验证。详细步骤见 `RTC_DEPLOYMENT.md`。
 
 ## 6. 🔐 安全与许可证
 

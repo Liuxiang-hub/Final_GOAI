@@ -38,7 +38,6 @@
   "deployment": {
     "execute_steps": 15,
     "postprocessor": "configs/deploy_rtc.yaml",
-    "rollback_postprocessor": "configs/deploy_temporal_adaptive.yaml",
     "order": [
       "rtc_guided_sample_lingbot_candidates",
       "normalize_and_validate",

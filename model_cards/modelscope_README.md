@@ -83,7 +83,7 @@ patches/lingbot-vla-v2/rtc_flow_matching.patch
 - 新块按实际执行步数对齐；
 - 旧块耗尽时强制安全报停。
 
-RTC不在safetensors权重内部，只下载模型权重不会自动得到异步调度或PiGDM引导。旧四块时序集成、自适应EMA和振荡抑制仍保留为RTC异常时的回退方案，不与RTC默认叠加。RTC目前完成CPU代码验证，尚待RTX 6000D延迟和双PIPER低速验证。
+RTC不在safetensors权重内部，只下载模型权重不会自动得到异步调度或PiGDM引导。项目已移除旧四块时序集成、自适应EMA和振荡抑制；RTC异常或动作块耗尽时必须安全停止。RTC目前完成CPU代码验证，尚待RTX 6000D延迟和双PIPER低速验证。
 
 ## 下载
 
