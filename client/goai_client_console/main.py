@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Safe visual shell for the GOAI dual-PIPER client.
 
-The default backend is intentionally simulation-only and never opens CAN devices.
+The execution backend is intentionally simulation-only and never opens CAN devices.
+Camera previews are read from the existing local xrobot service over HTTP.
 """
 
 from __future__ import annotations
@@ -12,8 +13,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QProcess, QTimer, Qt, Signal
+from PySide6.QtCore import QObject, QProcess, QTimer, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QImage, QPainter, QPen, QPixmap
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -160,9 +162,10 @@ class MockBackend(QObject):
                         self.returned_at_step = self.chunk_step
                         self.aligned_start_step = self.request_ticks
         phase = self.tick / 18.0
-        for idx, camera in enumerate(("cam_high", "cam_left_wrist", "cam_right_wrist")):
-            self.frame_ready.emit(camera, self._camera_image(camera, phase + idx * 1.8))
-        states = [round(math.sin(phase * 0.25 + i * 0.42) * (0.25 if active else 0.02), 4) for i in range(14)]
+        states = (
+            [round(math.sin(phase * 0.25 + i * 0.42) * 0.25, 4) for i in range(14)]
+            if active else [0.0] * 14
+        )
         latency = 0.0 if not self.connected else 34.0 + random.random() * 10.0
         request_status = self.request_status if active else "未请求"
         request_elapsed_ms = self.request_elapsed_ms if active else 0
@@ -196,6 +199,69 @@ class MockBackend(QObject):
         })
 
 
+class CameraPreviewClient(QObject):
+    """Asynchronously reads the three cameras already owned by xrobot."""
+
+    frame_ready = Signal(str, QImage)
+    status_changed = Signal(bool, str)
+    log = Signal(str, str)
+
+    ROLE_TO_KEY = {
+        "head": "cam_high",
+        "left_wrist": "cam_left_wrist",
+        "right_wrist": "cam_right_wrist",
+    }
+
+    def __init__(self, base_url: str = "http://127.0.0.1:19200") -> None:
+        super().__init__()
+        self.base_url = base_url.rstrip("/")
+        self.manager = QNetworkAccessManager(self)
+        self.timer = QTimer(self)
+        self.timer.setInterval(200)
+        self.timer.timeout.connect(self.poll)
+        self.inflight: set[str] = set()
+        self.healthy_roles: set[str] = set()
+        self.last_reported: bool | None = None
+
+    def start(self) -> None:
+        self.poll()
+        self.timer.start()
+
+    def stop(self) -> None:
+        self.timer.stop()
+
+    def poll(self) -> None:
+        for role in self.ROLE_TO_KEY:
+            if role in self.inflight:
+                continue
+            self.inflight.add(role)
+            request = QNetworkRequest(QUrl(f"{self.base_url}/v1/preview/{role}.jpg"))
+            request.setTransferTimeout(1000)
+            reply = self.manager.get(request)
+            reply.finished.connect(lambda role=role, reply=reply: self._finished(role, reply))
+
+    def _finished(self, role: str, reply: QNetworkReply) -> None:
+        self.inflight.discard(role)
+        ok = reply.error() == QNetworkReply.NoError
+        if ok:
+            image = QImage.fromData(bytes(reply.readAll()), "JPG")
+            ok = not image.isNull()
+            if ok:
+                self.healthy_roles.add(role)
+                self.frame_ready.emit(self.ROLE_TO_KEY[role], image)
+        else:
+            self.healthy_roles.discard(role)
+        reply.deleteLater()
+
+        all_ok = len(self.healthy_roles) == len(self.ROLE_TO_KEY)
+        if all_ok != self.last_reported:
+            self.last_reported = all_ok
+            detail = "真实三路" if all_ok else f"{len(self.healthy_roles)}/3 路"
+            self.status_changed.emit(all_ok, detail)
+            level = "INFO" if all_ok else "WARN"
+            self.log.emit(level, f"相机预览状态：{detail}；只读取 xrobot 预览，不抢占 USB 设备。")
+
+
 class StatusPill(QLabel):
     def __init__(self, name: str) -> None:
         super().__init__(f"● {name}  UNKNOWN")
@@ -211,7 +277,7 @@ class StatusPill(QLabel):
         self.setText(f"● {self.name}  {detail or state_cn}")
         self.setStyleSheet(
             f"QLabel {{ color:{color}; background:#151f2d; border:1px solid #29374a; "
-            "border-radius:7px; padding:6px 10px; font-weight:700; }}"
+            "border-radius:7px; padding:6px 10px; font-weight:700; }"
         )
 
 
@@ -224,7 +290,7 @@ class CameraPanel(QFrame):
         header = QHBoxLayout()
         name = QLabel(title)
         name.setStyleSheet("font-weight:700;color:#dce8f2")
-        badge = QLabel("模拟 · 640×360 · 25 FPS")
+        badge = QLabel("实时预览 · 640×480 · 5 FPS")
         badge.setStyleSheet("color:#09131d;background:#f6c85f;border-radius:5px;padding:2px 7px;font-weight:800")
         header.addWidget(name)
         header.addStretch()
@@ -333,13 +399,15 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("HUST_HRT_GOAI 双PIPERX 控制台")
         self.resize(1480, 920)
         self.backend = MockBackend()
+        self.preview = CameraPreviewClient()
         self.preflight_process = QProcess(self)
         self.preflight_process.setProcessChannelMode(QProcess.MergedChannels)
         self.camera_panels: dict[str, CameraPanel] = {}
         self.status: dict[str, StatusPill] = {}
         self._build_ui()
         self._connect()
-        self.append_log("INFO", "控制台已启动：模拟模式，不会向硬件输出动作。")
+        self.preview.start()
+        self.append_log("INFO", "控制台已启动：真实相机预览，执行层安全模拟，不会向硬件输出动作。")
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -351,7 +419,7 @@ class MainWindow(QMainWindow):
         title_box = QVBoxLayout()
         title = QLabel("HUST_HRT_GOAI 双PIPERX 控制台")
         title.setObjectName("title")
-        subtitle = QLabel("客户端可视化  •  Ubuntu 22.04  •  安全模拟后端")
+        subtitle = QLabel("真实三路相机  •  真实服务端预热  •  安全模拟执行层")
         subtitle.setObjectName("subtitle")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
@@ -425,7 +493,7 @@ class MainWindow(QMainWindow):
         telemetry_layout.addWidget(self.chunk)
         self.action_timeline = ActionTimeline()
         telemetry_layout.addWidget(self.action_timeline)
-        self.action_vector = QLabel("当前发送动作：等待动作")
+        self.action_vector = QLabel("模拟动作（未发送至机械臂）：等待动作")
         self.action_vector.setWordWrap(True)
         self.action_vector.setStyleSheet(
             "color:#9fb3c5;background:#101722;border:1px solid #29374a;"
@@ -440,7 +508,7 @@ class MainWindow(QMainWindow):
             status_grid.addWidget(pill, index // 3, index % 3)
         telemetry_layout.addLayout(status_grid)
 
-        state_box = QGroupBox("机械臂状态  •  14 维")
+        state_box = QGroupBox("模拟状态预览  •  14 维（未读取真机）")
         state_layout = QVBoxLayout(state_box)
         self.state_table = QTableWidget(2, 7)
         self.state_table.setVerticalHeaderLabels(["左臂", "右臂"])
@@ -505,6 +573,9 @@ class MainWindow(QMainWindow):
         self.backend.frame_ready.connect(lambda key, image: self.camera_panels[key].set_image(image))
         self.backend.log.connect(self.append_log)
         self.backend.mode_changed.connect(self.update_mode)
+        self.preview.frame_ready.connect(lambda key, image: self.camera_panels[key].set_image(image))
+        self.preview.status_changed.connect(lambda ok, detail: self.status["cameras"].set_state(ok, detail))
+        self.preview.log.connect(self.append_log)
         self.preflight_process.readyReadStandardOutput.connect(self.read_preflight_output)
         self.preflight_process.finished.connect(self.preflight_finished)
 
@@ -570,11 +641,13 @@ class MainWindow(QMainWindow):
         )
         self.action_timeline.update_state(data)
         values = "  ".join(f"{name}={value:+.4f}" for name, value in zip(JOINT_NAMES, data["current_action"]))
-        self.action_vector.setText(f"当前发送动作\n{values}")
+        self.action_vector.setText(f"模拟动作（未发送至机械臂）\n{values}")
         for index, value in enumerate(data["states"]):
             self.state_table.item(index // 7, index % 7).setText(f"{value:+.4f}")
         for key in ("server", "rtc", "cameras", "can", "watchdog"):
-            detail = "MOCK" if key in {"cameras", "can"} else ""
+            if key == "cameras":
+                continue
+            detail = "安全锁定" if key == "can" else ""
             self.status[key].set_state(bool(data[key]), detail)
 
     def append_log(self, level: str, message: str) -> None:
@@ -591,6 +664,7 @@ class MainWindow(QMainWindow):
             self.append_log("INFO", f"日志已保存：{filename}")
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self.preview.stop()
         self.backend.set_mode("STOPPED")
         event.accept()
 

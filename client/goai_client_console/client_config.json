@@ -14,8 +14,8 @@
       "right_wrist": "observation.images.cam_right_wrist"
     },
     "state_key": "observation.state",
-    "prompt_key": "prompt",
-    "prompt_as_list": true,
+    "prompt_key": "task",
+    "prompt_as_list": false,
     "image_width": 640,
     "image_height": 480,
     "state_dimension": 14

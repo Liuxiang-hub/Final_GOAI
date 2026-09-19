@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=HUST_HRT_GOAI 双PIPERX 控制台
+Comment=GOAI 双臂客户端控制台（硬件输出默认关闭）
+Exec=/home/user/GOAI/goai_client_console/run.sh
+Path=/home/user/GOAI/goai_client_console
+Terminal=false
+Categories=Development;Science;
+StartupNotify=true

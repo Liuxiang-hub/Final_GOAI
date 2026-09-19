@@ -1,6 +1,7 @@
 # HUST_HRT_GOAI 双PIPERX 控制台
 
-Ubuntu 22.04 客户端可视化壳子。当前版本默认使用模拟数据，不连接 CAN、不下发机械臂动作。
+Ubuntu 22.04 客户端控制台。三路画面读取现场 xrobot 的只读预览接口；执行层保持模拟，
+不连接 CAN、不下发机械臂动作。
 
 ## 安装与启动
 
@@ -45,7 +46,14 @@ ssh -N \
   root@47.97.37.69
 ```
 
-保持该终端运行。不要把密码写进脚本；正式使用 SSH 密钥。
+现场电脑已安装并启用用户服务 `goai-server-tunnel.service`，登录后会自动建立隧道。
+可用下面的命令检查：
+
+```bash
+systemctl --user status goai-server-tunnel.service
+```
+
+手工命令仅用于故障恢复。不要把密码写进脚本；正式使用 SSH 密钥。
 
 ### 3. 命令行静止预热
 
@@ -74,18 +82,20 @@ ssh -N \
 
 ### 5. 三路相机检查
 
-连接相机后执行：
+现场三台 Orbbec 相机已经由 `xrobot eval-runner` 独占管理，控制台只读取
+`http://127.0.0.1:19200/v1/preview/<role>.jpg`，不要再用 OpenCV 抢占 USB 设备。
+可用下面的命令检查健康状态：
 
 ```bash
-v4l2-ctl --list-devices
-./.venv/bin/python camera_preflight.py
+curl http://127.0.0.1:19200/v1/health
+curl http://127.0.0.1:19200/v1/preview/status
 ```
 
 程序会在 `camera_preflight/` 保存三张现场帧。必须人工确认顶部、左腕、右腕没有接反，并检查旋转方向、遮挡和曝光。
 
 ## 当前能力
 
-- 三路模拟相机画面与帧率状态
+- 三路真实相机只读预览（顶部、左腕、右腕）
 - 双臂 14 维状态展示
 - 推理服务器、RTC、CAN、相机、看门狗状态卡片
 - 推理延迟、P95/P99、动作块进度和控制频率
@@ -118,7 +128,8 @@ v4l2-ctl --list-devices
 
 ## 当前安全边界
 
-已经完成的是 GUI、模拟 RTC、SSH 隧道模板和真实服务端静止预热。尚未实现且不会假装实现：
+已经完成的是 GUI、真实相机预览、自动 SSH 隧道、模拟 RTC 和真实服务端静止预热。
+尚未实现且不会假装实现：
 
 - PIPER X SDK/CAN 连接；
 - 真实机械臂状态读取；
