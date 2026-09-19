@@ -1,0 +1,34 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8006,
+    "robot_name": "goai_piper_x",
+    "connect_timeout_seconds": 15,
+    "inference_timeout_seconds": 10
+  },
+  "lingbot_repo": "../lingbot-vla-v2",
+  "observation": {
+    "camera_keys": {
+      "high": "observation.images.cam_high",
+      "left_wrist": "observation.images.cam_left_wrist",
+      "right_wrist": "observation.images.cam_right_wrist"
+    },
+    "state_key": "observation.state",
+    "prompt_key": "prompt",
+    "prompt_as_list": true,
+    "image_width": 640,
+    "image_height": 480,
+    "state_dimension": 14
+  },
+  "cameras": {
+    "high": 0,
+    "left_wrist": 1,
+    "right_wrist": 2
+  },
+  "safety": {
+    "hardware_output_enabled": false,
+    "control_hz": 25,
+    "request_trigger_step": 15,
+    "chunk_length": 50
+  }
+}

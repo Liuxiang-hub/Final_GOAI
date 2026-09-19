@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# 将密钥路径换成现场使用的SSH私钥。不要把密码写入脚本。
+exec ssh \
+  -N \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=15 \
+  -o ServerAliveCountMax=3 \
+  -L 8006:127.0.0.1:8006 \
+  root@47.97.37.69
+
